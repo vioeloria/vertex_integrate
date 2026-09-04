@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Netcup Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&family=Nunito+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-pill: 100px;
+  --font: 'Nunito Sans', sans-serif;
+  --font-num: 'Nunito', sans-serif;
+  --transition: .2s cubic-bezier(.4,0,.2,1);
+}
+
+[data-theme="dark"] {
+  --bg:       #0e1117;
+  --bg2:      #141820;
+  --surface:  #1a1f2e;
+  --surface2: #1f2535;
+  --border:   rgba(255,255,255,.07);
+  --border2:  rgba(255,255,255,.12);
+  --text:     #e2e6f0;
+  --text2:    #8892a8;
+  --text3:    #525c72;
+  --accent:   #5b8def;
+  --accent-bg:rgba(91,141,239,.12);
+  --green:    #3ecf8e;
+  --green-bg: rgba(62,207,142,.1);
+  --red:      #f06b6b;
+  --red-bg:   rgba(240,107,107,.1);
+  --yellow:   #f5c842;
+  --yellow-bg:rgba(245,200,66,.1);
+  --purple:   #9d7bf0;
+  --shadow:   0 2px 20px rgba(0,0,0,.4);
+  --shadow-sm:0 1px 8px rgba(0,0,0,.3);
+}
+
+[data-theme="light"] {
+  --bg:       #f4f6fb;
+  --bg2:      #edf0f7;
+  --surface:  #ffffff;
+  --surface2: #f8f9fc;
+  --border:   rgba(0,0,0,.07);
+  --border2:  rgba(0,0,0,.12);
+  --text:     #1a2035;
+  --text2:    #6b7796;
+  --text3:    #a8b0c4;
+  --accent:   #3b72e8;
+  --accent-bg:rgba(59,114,232,.08);
+  --green:    #1ea97c;
+  --green-bg: rgba(30,169,124,.08);
+  --red:      #d94f4f;
+  --red-bg:   rgba(217,79,79,.08);
+  --yellow:   #c89a10;
+  --yellow-bg:rgba(200,154,16,.08);
+  --purple:   #7b5cd6;
+  --shadow:   0 2px 20px rgba(0,0,0,.08);
+  --shadow-sm:0 1px 8px rgba(0,0,0,.06);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--transition), color var(--transition);
+}
+
+/* ── Topbar ── */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 0 20px;
+  height: 56px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+
+.topbar-left { display:flex; align-items:center; gap:12px; }
+
+.logo {
+  font-family: var(--font-num);
+  font-size: 16px; font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -.3px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.logo-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2.4s ease infinite;
+}
+
+@keyframes pulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.4; transform:scale(.85); }
+}
+
+.badge-live {
+  font-size: 10px; font-weight: 700; letter-spacing: .6px;
+  padding: 3px 8px; border-radius: var(--radius-pill);
+  background: var(--green-bg); color: var(--green);
+  text-transform: uppercase;
+}
+
+.badge-live.syncing { background: var(--yellow-bg); color: var(--yellow); }
+
+.topbar-right { display:flex; align-items:center; gap:8px; }
+
+.btn {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  font-family: var(--font);
+  font-size: 13px; font-weight: 500;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex; align-items: center; gap: 6px;
+}
+
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:active { transform: scale(.97); }
+
+.btn-icon {
+  width: 36px; height: 36px; padding: 0;
+  justify-content: center;
+}
+
+.select-sort {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  font-family: var(--font);
+  font-size: 12px; font-weight: 500;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer; outline: none;
+  transition: border-color var(--transition);
+}
+.select-sort:focus { border-color: var(--accent); }
+
+/* ── Summary strip ── */
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+
+.sum-item {
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 14px;
+  border-right: 1px solid var(--border);
+  position: relative;
+  transition: background var(--transition);
+}
+
+.sum-item:last-child { border-right: none; }
+
+.sum-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.sum-icon.blue   { background: var(--accent-bg); color: var(--accent); }
+.sum-icon.green  { background: var(--green-bg);  color: var(--green);  }
+.sum-icon.red    { background: var(--red-bg);    color: var(--red);    }
+.sum-icon.purple { background: rgba(157,123,240,.1); color: var(--purple); }
+
+.sum-text { display:flex; flex-direction:column; gap:2px; }
+
+.sum-label {
+  font-size: 11px; color: var(--text3);
+  font-weight: 500; letter-spacing: .3px;
+}
+
+.sum-val {
+  font-family: var(--font-num);
+  font-size: 22px; font-weight: 700; line-height: 1;
+  color: var(--text);
+  transition: color var(--transition);
+}
+
+.sum-val.green { color: var(--green); }
+.sum-val.red   { color: var(--red);   }
+.sum-val.blue  { color: var(--accent);}
+
+/* ── Main ── */
+.main {
+  padding: 20px 20px 80px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+/* ── Section header ── */
+.section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px;
+}
+
+.section-title {
+  font-size: 12px; font-weight: 600; letter-spacing: .5px;
+  color: var(--text3); text-transform: uppercase;
+}
+
+.section-line { flex: 1; height: 1px; background: var(--border); }
+
+/* ── Grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+/* ── Card ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+  display: flex; flex-direction: column;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--border2);
+}
+
+.card.throttled {
+  border-color: rgba(240,107,107,.35);
+}
+
+.card.throttled .card-glow {
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--red), transparent);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.card-inner { position: relative; }
+
+/* Card top */
+.card-top {
+  padding: 16px 16px 14px;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+}
+
+.card-info { min-width: 0; flex: 1; }
+
+.card-name {
+  font-family: var(--font-num);
+  font-size: 14px; font-weight: 700;
+  color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 5px;
+}
+
+.card-meta {
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px; font-weight: 500;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+
+.chip.ip { font-family: monospace; letter-spacing: .3px; }
+.chip.account { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
+
+.status-badge {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11px; font-weight: 700; letter-spacing: .3px;
+  display: flex; align-items: center; gap: 5px;
+}
+
+.status-badge.normal {
+  background: var(--green-bg); color: var(--green);
+}
+
+.status-badge.throttled {
+  background: var(--red-bg); color: var(--red);
+}
+
+.status-badge-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2.4s ease infinite;
+}
+
+/* Traffic section */
+.card-traffic {
+  margin: 0 12px;
+  background: var(--surface2);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.traf-item { display: flex; flex-direction: column; gap: 3px; }
+
+.traf-label {
+  font-size: 10px; font-weight: 600;
+  color: var(--text3); letter-spacing: .4px; text-transform: uppercase;
+}
+
+.traf-val {
+  font-family: var(--font-num);
+  font-size: 14px; font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.traf-val.total { color: var(--text); }
+.traf-val.up    { color: var(--accent); }
+.traf-val.down  { color: var(--purple); }
+
+/* Progress bar */
+.traffic-bar-wrap {
+  margin: 10px 12px 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+
+.traffic-bar-labels {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--text3);
+}
+
+.traffic-bar {
+  height: 4px; border-radius: 4px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+
+.traffic-bar-fill {
+  height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--purple));
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+
+.traffic-bar-fill.high { background: linear-gradient(90deg, var(--yellow), var(--red)); }
+
+/* Throttle details */
+.card-throttle {
+  margin: 10px 12px 0;
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.th-item {
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.th-label {
+  font-size: 9px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--text3);
+}
+
+.th-val {
+  font-family: var(--font-num);
+  font-size: 13px; font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.th-val.alert { color: var(--red); }
+.th-val.dim   { color: var(--text3); }
+
+/* Card footer */
+.card-foot {
+  margin-top: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--surface2);
+}
+
+.foot-state {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600;
+  color: var(--text3);
+}
+
+.foot-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+
+.foot-dot.on  { background: var(--green); }
+.foot-dot.off { background: var(--red); }
+
+/* ── Empty / Loading ── */
+.state-box {
+  grid-column: 1/-1;
+  padding: 80px 20px;
+  text-align: center;
+  color: var(--text3);
+  font-size: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+
+.spinner {
+  width: 32px; height: 32px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Bottom bar ── */
+.bottombar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 11px; color: var(--text3);
+  backdrop-filter: blur(12px);
+}
+
+.countdown-wrap {
+  display: flex; align-items: center; gap: 8px;
+}
+
+.countdown-track {
+  width: 72px; height: 3px;
+  border-radius: 3px;
+  background: var(--border2);
+  overflow: hidden;
+}
+
+.countdown-fill {
+  height: 100%; border-radius: 3px;
+  background: var(--accent);
+  transition: width .5s linear;
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .topbar { padding: 0 14px; height: 50px; }
+  .logo { font-size: 14px; }
+  .summary { grid-template-columns: repeat(2, 1fr); }
+  .sum-item { padding: 12px 14px; }
+  .sum-val { font-size: 20px; }
+  .sum-icon { width: 32px; height: 32px; font-size: 15px; border-radius: 8px; }
+  .main { padding: 14px 12px 72px; }
+  .grid { grid-template-columns: 1fr; gap: 10px; }
+  .btn-icon span { display: none; }
+  .select-sort { font-size: 11px; }
+  .sum-item:nth-child(3) { border-right: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="logo">
+      <span class="logo-dot"></span>
+      Netcup
+    </div>
+    <span class="badge-live" id="liveBadge">LIVE</span>
+  </div>
+  <div class="topbar-right">
+    <select class="select-sort" id="sortSelect" onchange="applySort()">
+      <option value="default">默认排序</option>
+      <option value="traffic">总流量 ↓</option>
+      <option value="upload">上传 ↓</option>
+      <option value="download">下载 ↓</option>
+      <option value="throttle">限速次数 ↓</option>
+      <option value="status">限速优先</option>
+    </select>
+    <button class="btn btn-icon" id="themeBtn" onclick="toggleTheme()" title="切换主题">
+      <span id="themeIcon">☀️</span>
+    </button>
+    <button class="btn" onclick="fetchData()">↺ 刷新</button>
+  </div>
+</header>
+
+<div class="summary" id="summary">
+  <div class="sum-item">
+    <div class="sum-icon blue">🖥</div>
+    <div class="sum-text">
+      <div class="sum-label">全部服务器</div>
+      <div class="sum-val blue" id="s-total">—</div>
+    </div>
+  </div>
+  <div class="sum-item">
+    <div class="sum-icon green">✓</div>
+    <div class="sum-text">
+      <div class="sum-label">正常运行</div>
+      <div class="sum-val green" id="s-normal">—</div>
+    </div>
+  </div>
+  <div class="sum-item">
+    <div class="sum-icon red">⚠</div>
+    <div class="sum-text">
+      <div class="sum-label">限速中</div>
+      <div class="sum-val red" id="s-throttled">—</div>
+    </div>
+  </div>
+  <div class="sum-item">
+    <div class="sum-icon purple">%</div>
+    <div class="sum-text">
+      <div class="sum-label">可用率</div>
+      <div class="sum-val" id="s-avail">—</div>
+    </div>
+  </div>
+</div>
+
+<main class="main">
+  <div class="section-header">
+    <div class="section-title" id="gridTitle">服务器列表</div>
+    <div class="section-line"></div>
+  </div>
+  <div class="grid" id="grid">
+    <div class="state-box">
+      <div class="spinner"></div>
+      <div>正在加载数据…</div>
+    </div>
+  </div>
+</main>
+
+<div class="bottombar">
+  <span id="lastUpdate">尚未更新</span>
+  <div class="countdown-wrap">
+    <span id="countdownLabel">10s</span>
+    <div class="countdown-track">
+      <div class="countdown-fill" id="countdownFill" style="width:100%"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_URL = '/api/status';
+const INTERVAL = 10000;
+let rawServers = [];
+let countdown = INTERVAL / 1000;
+let timer;
+
+/* ── Theme ── */
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeIcon').textContent = isDark ? '🌙' : '☀️';
+  localStorage.setItem('nc-theme', isDark ? 'light' : 'dark');
+}
+(function() {
+  const saved = localStorage.getItem('nc-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+  document.getElementById('themeIcon').textContent = saved === 'dark' ? '☀️' : '🌙';
+})();
+
+/* ── IP Mask: keep C+D segments, mask A+B ── */
+function maskIP(ip) {
+  if (!ip) return '—';
+  const parts = ip.split('.');
+  if (parts.length === 4) {
+    
+    return `${parts[0]}.${parts[1]}.*.*`;
+  }
+  return ip;
+}
+
+/* ── Traffic format ── */
+function fmtTraffic(tib) {
+  if (tib >= 1)       return tib.toFixed(3) + ' TiB';
+  if (tib >= 0.001)   return (tib * 1024).toFixed(2) + ' GiB';
+  return (tib * 1024 * 1024).toFixed(0) + ' MiB';
+}
+
+/* ── Fetch ── */
+async function fetchData() {
+  resetCountdown();
+  const badge = document.getElementById('liveBadge');
+  badge.textContent = 'SYNC';
+  badge.className = 'badge-live syncing';
+  try {
+    const res = await fetch(API_URL);
+    const json = await res.json();
+    if (json.success) {
+      rawServers = json.data.servers || [];
+      renderAll(json.data);
+    }
+  } catch(e) {
+    document.getElementById('grid').innerHTML =
+      `<div class="state-box"><div>⚠ 加载失败，稍后重试</div></div>`;
+  }
+  badge.textContent = 'LIVE';
+  badge.className = 'badge-live';
+}
+
+/* ── Render ── */
+function renderAll(data) {
+  const total     = data.total_servers || 0;
+  const normal    = data.normal_count  || 0;
+  const throttled = data.throttled_count || 0;
+  const avail     = total > 0 ? ((normal/total)*100).toFixed(1) : '100';
+
+  document.getElementById('s-total').textContent    = total;
+  document.getElementById('s-normal').textContent   = normal;
+  document.getElementById('s-throttled').textContent = throttled;
+
+  const el = document.getElementById('s-avail');
+  el.textContent = avail + '%';
+  el.className = 'sum-val ' + (parseFloat(avail)>=90?'green':parseFloat(avail)>=70?'':'red');
+
+  document.getElementById('lastUpdate').textContent = '最后更新 ' + (data.last_update || '—');
+  document.getElementById('gridTitle').textContent =
+    `服务器列表 · 共 ${total} 台` + (throttled > 0 ? ` · ${throttled} 台限速中` : '');
+  renderGrid();
+}
+
+function applySort() { renderGrid(); }
+
+function renderGrid() {
+  const sort = document.getElementById('sortSelect').value;
+  let servers = [...rawServers];
+  if (sort==='traffic')  servers.sort((a,b)=>b.traffic_tib-a.traffic_tib);
+  if (sort==='upload')   servers.sort((a,b)=>b.tx_tib-a.tx_tib);
+  if (sort==='download') servers.sort((a,b)=>b.rx_tib-a.rx_tib);
+  if (sort==='throttle') servers.sort((a,b)=>b.throttle_count-a.throttle_count);
+  if (sort==='status')   servers.sort((a,b)=>(b.trafficThrottled?1:0)-(a.trafficThrottled?1:0));
+  if (!servers.length) {
+    document.getElementById('grid').innerHTML = `<div class="state-box"><div>暂无数据</div></div>`;
+    return;
+  }
+  document.getElementById('grid').innerHTML = servers.map(renderCard).join('');
+}
+
+function renderCard(s) {
+  const isThrottled = s.trafficThrottled;
+  const isUp = (s.status||'').toLowerCase() === 'running';
+
+  /* Traffic bar: assume monthly quota of ~10 TiB, adjust if desired */
+  const quota = 10;
+  const pct = Math.min(100, ((s.traffic_tib||0)/quota*100)).toFixed(1);
+  const barClass = parseFloat(pct) > 85 ? 'high' : '';
+
+  const durationLabel = isThrottled ? '当前已限速' : '累计限速';
+  const durationVal   = isThrottled
+    ? `<span class="th-val alert">${s.current_throttle_duration||'—'}</span>`
+    : `<span class="th-val">${s.total_throttled_time||'—'}</span>`;
+
+  const lastThrottle   = s.last_throttle_time
+    ? `<div class="th-item"><div class="th-label">上次限速</div><div class="th-val dim" style="font-size:11px">${s.last_throttle_time}</div></div>` : '';
+  const lastUnthrottle = s.last_unthrottle_time
+    ? `<div class="th-item"><div class="th-label">解除时间</div><div class="th-val dim" style="font-size:11px">${s.last_unthrottle_time}</div></div>` : '';
+
+  return `
+<div class="card ${isThrottled?'throttled':''}">
+  <div class="card-inner">
+    ${isThrottled?'<div class="card-glow"></div>':''}
+    <div class="card-top">
+      <div class="card-info">
+        <div class="card-name" title="${s.server_name||''}"> ${s.server_name||'—'}</div>
+        <div class="card-meta">
+          <span class="chip ip">${maskIP(s.ipv4IP)}</span>
+        ${s.account_id?`<span class="chip account">${s.account_id}</span>`:''}
+        </div>
+      </div>
+      <div class="status-badge ${isThrottled?'throttled':'normal'}">
+        <span class="status-badge-dot"></span>
+        ${isThrottled?'限速中':'正常'}
+      </div>
+    </div>
+
+    <div class="card-traffic">
+      <div class="traf-item">
+        <div class="traf-label">总流量</div>
+        <div class="traf-val total">${fmtTraffic(s.traffic_tib||0)}</div>
+      </div>
+      <div class="traf-item">
+        <div class="traf-label">↑ 上传</div>
+        <div class="traf-val up">${fmtTraffic(s.tx_tib||0)}</div>
+      </div>
+      <div class="traf-item">
+        <div class="traf-label">↓ 下载</div>
+        <div class="traf-val down">${fmtTraffic(s.rx_tib||0)}</div>
+      </div>
+    </div>
+
+    <div class="traffic-bar-wrap">
+      <div class="traffic-bar-labels">
+        <span>流量使用</span>
+        <span>${pct}%</span>
+      </div>
+      <div class="traffic-bar">
+        <div class="traffic-bar-fill ${barClass}" style="width:${pct}%"></div>
+      </div>
+    </div>
+
+    <div class="card-throttle">
+      <div class="th-item">
+        <div class="th-label">限速次数</div>
+        <div class="th-val ${s.throttle_count>0?'':'dim'}">${s.throttle_count>0?s.throttle_count+' 次':'—'}</div>
+      </div>
+      <div class="th-item">
+        <div class="th-label">${durationLabel}</div>
+        ${durationVal}
+      </div>
+      ${lastThrottle}
+      ${lastUnthrottle}
+    </div>
+
+    <div class="card-foot">
+      <div class="foot-state">
+        <div class="foot-dot ${isUp?'on':'off'}"></div>
+        ${s.status||'UNKNOWN'}
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
+/* ── Countdown ── */
+function resetCountdown() {
+  clearInterval(timer);
+  countdown = INTERVAL / 1000;
+  tick();
+  timer = setInterval(() => {
+    countdown--;
+    if (countdown <= 0) fetchData();
+    else tick();
+  }, 1000);
+}
+
+function tick() {
+  const pct = (countdown/(INTERVAL/1000))*100;
+  document.getElementById('countdownFill').style.width = pct+'%';
+  document.getElementById('countdownLabel').textContent = countdown+'s';
+}
+
+/* ── Demo data (remove when API is live) ── */
+function loadDemo() {
+  const demo = {
+    success: true,
+    data: {
+      total_servers: 6, normal_count: 4, throttled_count: 2,
+      last_update: new Date().toLocaleTimeString('zh-CN'),
+      servers: [
+        { server_name: 'vps-de-fra-01', ipv4IP: '85.215.110.42', account_id: 'acc-8821',
+          traffic_tib: 7.21, tx_tib: 2.10, rx_tib: 5.11, status: 'running',
+          trafficThrottled: false, throttle_count: 1, total_throttled_time: '2h 14m',
+          last_throttle_time: '2024-06-12 03:41', last_unthrottle_time: '2024-06-12 05:55' },
+        { server_name: 'vps-de-nur-02', ipv4IP: '195.201.67.88', account_id: 'acc-8821',
+          traffic_tib: 9.87, tx_tib: 3.44, rx_tib: 6.43, status: 'running',
+          trafficThrottled: true, throttle_count: 3, total_throttled_time: '11h 30m',
+          current_throttle_duration: '5h 12m', last_throttle_time: '2024-06-14 18:00' },
+        { server_name: 'rs-at-vie-04', ipv4IP: '176.9.22.149', account_id: 'acc-1134',
+          traffic_tib: 0.44, tx_tib: 0.12, rx_tib: 0.32, status: 'running',
+          trafficThrottled: false, throttle_count: 0, total_throttled_time: '—' },
+        { server_name: 'vps-nl-ams-07', ipv4IP: '94.130.55.201', account_id: 'acc-3305',
+          traffic_tib: 5.03, tx_tib: 1.80, rx_tib: 3.23, status: 'running',
+          trafficThrottled: false, throttle_count: 2, total_throttled_time: '4h 02m',
+          last_throttle_time: '2024-05-30 11:20', last_unthrottle_time: '2024-05-30 15:22' },
+        { server_name: 'rs-de-ber-03', ipv4IP: '116.203.44.77', account_id: 'acc-8821',
+          traffic_tib: 9.96, tx_tib: 4.00, rx_tib: 5.96, status: 'running',
+          trafficThrottled: true, throttle_count: 5, total_throttled_time: '22h 48m',
+          current_throttle_duration: '8h 45m', last_throttle_time: '2024-06-14 10:00' },
+        { server_name: 'vps-us-lax-11', ipv4IP: '23.88.100.66', account_id: 'acc-1134',
+          traffic_tib: 1.15, tx_tib: 0.55, rx_tib: 0.60, status: 'stopped',
+          trafficThrottled: false, throttle_count: 0, total_throttled_time: '—' }
+      ]
+    }
+  };
+  rawServers = demo.data.servers;
+  renderAll(demo.data);
+  const badge = document.getElementById('liveBadge');
+  badge.textContent = 'DEMO';
+  badge.style.background = 'var(--yellow-bg)';
+  badge.style.color = 'var(--yellow)';
+}
+
+/* ── Init ── */
+(async function() {
+  resetCountdown();
+  try {
+    const res = await fetch(API_URL);
+    const json = await res.json();
+    if (json.success) { rawServers = json.data.servers||[]; renderAll(json.data); }
+    else loadDemo();
+  } catch(e) { loadDemo(); }
+})();
+</script>
+</body>
+</html>

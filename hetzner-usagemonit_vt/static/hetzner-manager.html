@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hetzner Cloud Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sky:       #e8f0fe;
+  --cloud:     #f4f7ff;
+  --white:     #ffffff;
+  --glass:     rgba(255,255,255,0.72);
+  --glass2:    rgba(255,255,255,0.88);
+  --border-g:  rgba(120,140,255,0.18);
+  --border-g2: rgba(120,140,255,0.32);
+  --ink:       #1a2040;
+  --ink2:      #5260a0;
+  --ink3:      #8b96c8;
+  --ink4:      #bdc5e8;
+  --blue:      #4361ee;
+  --blue2:     #738bff;
+  --violet:    #7c3aed;
+  --cyan:      #0ea5e9;
+  --emerald:   #10b981;
+  --rose:      #f43f5e;
+  --amber:     #f59e0b;
+  --orange:    #f97316;
+  --g-hero:    linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f64f59 100%);
+  --g-blue:    linear-gradient(135deg,#4361ee,#738bff);
+  --g-violet:  linear-gradient(135deg,#7c3aed,#a855f7);
+  --g-cyan:    linear-gradient(135deg,#0ea5e9,#38bdf8);
+  --g-green:   linear-gradient(135deg,#10b981,#34d399);
+  --g-rose:    linear-gradient(135deg,#f43f5e,#fb7185);
+  --g-amber:   linear-gradient(135deg,#f59e0b,#fbbf24);
+  --g-orange:  linear-gradient(135deg,#f97316,#fb923c);
+  --sb-width:  230px;
+  --r:  14px;
+  --r2: 10px;
+  --r3: 24px;
+  --shadow-soft:  0 4px 24px rgba(67,97,238,0.08), 0 1px 4px rgba(0,0,0,0.04);
+  --shadow-lift:  0 12px 40px rgba(67,97,238,0.15), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-float: 0 20px 60px rgba(67,97,238,0.2), 0 4px 16px rgba(0,0,0,0.08);
+  --sans: 'Sora', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body {
+  font-family: var(--sans);
+  background: var(--sky);
+  color: var(--ink);
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+body::before, body::after {
+  content:'';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: 0;
+  pointer-events: none;
+  animation: blobDrift 18s ease-in-out infinite alternate;
+}
+body::before {
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(103,126,234,0.18) 0%, transparent 70%);
+  top: -200px; left: -100px;
+}
+body::after {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(246,79,89,0.12) 0%, transparent 70%);
+  bottom: -150px; right: -100px;
+  animation-direction: alternate-reverse;
+}
+@keyframes blobDrift {
+  0%   { transform: translate(0,0) scale(1); }
+  50%  { transform: translate(40px,30px) scale(1.1); }
+  100% { transform: translate(-20px,50px) scale(0.95); }
+}
+
+/* ── 汉堡按钮 (仅移动端) ── */
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 14px; left: 14px;
+  z-index: 300;
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  background: var(--glass2);
+  border: 1.5px solid var(--border-g2);
+  cursor: pointer;
+  align-items: center; justify-content: center;
+  font-size: 18px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
+  transition: all .2s;
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+.hamburger:hover { background: var(--white); box-shadow: var(--shadow-lift); }
+
+/* ── 遮罩层 ── */
+.sb-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(26,32,64,.4);
+  z-index: 48;
+  opacity: 0;
+  transition: opacity .25s;
+  -webkit-tap-highlight-color: transparent;
+}
+.sb-overlay.open { display: block; opacity: 1; }
+
+/* ── LOGIN ── */
+#login-screen {
+  position: fixed; inset: 0; z-index: 999;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg,rgba(103,126,234,.06) 0%,rgba(246,79,89,.05) 100%);
+}
+.login-card {
+  width: 400px;
+  background: var(--glass2);
+  border: 1px solid var(--border-g2);
+  border-radius: 28px;
+  padding: 48px 44px;
+  box-shadow: var(--shadow-float);
+  animation: popIn .5s cubic-bezier(.34,1.56,.64,1);
+  position: relative; overflow: hidden;
+}
+.login-card::before {
+  content:'';
+  position: absolute; top:0; left:0; right:0; height:3px;
+  background: var(--g-hero);
+}
+@keyframes popIn {
+  from { opacity:0; transform:scale(.88) translateY(20px); }
+  to   { opacity:1; transform:scale(1) translateY(0); }
+}
+.lbox-brand { display:flex; align-items:center; gap:14px; margin-bottom:36px; }
+.lbox-orb {
+  width:48px; height:48px; border-radius:16px;
+  background: var(--g-hero);
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px; flex-shrink:0;
+  box-shadow: 0 8px 24px rgba(103,126,234,0.4);
+}
+.lbox-name { font-size:19px; font-weight:800; color:var(--ink); }
+.lbox-sub  { font-size:12px; color:var(--ink3); margin-top:2px; }
+.lbox-greeting { font-size:24px; font-weight:700; margin-bottom:6px; }
+.lbox-hint { font-size:13px; color:var(--ink3); margin-bottom:28px; }
+.lf-label { font-size:11px; font-weight:600; color:var(--ink3); text-transform:uppercase; letter-spacing:.8px; display:block; margin-bottom:7px; }
+.lf-input {
+  width:100%; padding:12px 16px;
+  background: var(--white); border: 1.5px solid var(--border-g2);
+  border-radius: var(--r2); color:var(--ink);
+  font-family:var(--mono); font-size:14px; outline:none;
+  transition: all .2s;
+}
+.lf-input:focus { border-color: var(--blue); box-shadow:0 0 0 4px rgba(67,97,238,.1); }
+.lf-group { margin-bottom:20px; }
+.btn-auth {
+  width:100%; padding:13px;
+  background: var(--g-blue); border:none; border-radius:var(--r2);
+  color:#fff; font-size:15px; font-weight:600; font-family:var(--sans);
+  cursor:pointer; transition:all .2s; margin-top:4px;
+  box-shadow: 0 6px 20px rgba(67,97,238,.35);
+}
+.btn-auth:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(67,97,238,.45); }
+.auth-err { color:var(--rose); font-size:12px; text-align:center; margin-top:12px; display:none; }
+
+/* ── LAYOUT ── */
+#app { display:none; min-height:100vh; position:relative; z-index:1; }
+#app.show { display:flex; }
+
+.sidebar {
+  position:fixed; inset:0 auto 0 0;
+  width: var(--sb-width);
+  background: var(--glass);
+  border-right: 1px solid var(--border-g);
+  backdrop-filter: blur(24px);
+  display:flex; flex-direction:column; z-index:50;
+  box-shadow: 4px 0 24px rgba(67,97,238,.06);
+  transition: transform .25s cubic-bezier(.4,0,.2,1), width .2s ease;
+}
+.sb-head { padding:22px 18px 16px; border-bottom:1px solid var(--border-g); }
+.sb-brand { display:flex; align-items:center; gap:11px; }
+.sb-orb {
+  width:34px; height:34px; border-radius:10px;
+  background:var(--g-blue); display:flex; align-items:center; justify-content:center;
+  font-size:15px; flex-shrink:0; box-shadow:0 4px 12px rgba(67,97,238,.3);
+}
+.sb-title { font-size:14px; font-weight:800; color:var(--ink); }
+.sb-ver   { font-size:10px; color:var(--ink3); }
+.sb-nav { flex:1; padding:14px 10px; overflow-y:auto; }
+.sb-section { margin-bottom:20px; }
+.sb-cat { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--ink4); padding:0 10px; margin-bottom:6px; }
+.nav-item {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 12px; border-radius:12px;
+  cursor:pointer; transition:all .18s;
+  font-size:13px; font-weight:500; color:var(--ink2);
+  user-select:none; position:relative;
+}
+.nav-item:hover { background:rgba(67,97,238,.07); color:var(--blue); }
+.nav-item.active {
+  background: linear-gradient(135deg,rgba(67,97,238,.12),rgba(115,139,255,.08));
+  color:var(--blue); font-weight:600;
+  box-shadow: inset 0 0 0 1px rgba(67,97,238,.2);
+}
+.nav-item.active::before {
+  content:''; position:absolute; left:0; top:50%; transform:translateY(-50%);
+  width:3px; height:18px; background:var(--g-blue); border-radius:0 3px 3px 0;
+}
+.nav-icon { font-size:16px; width:20px; text-align:center; flex-shrink:0; }
+.sb-foot { padding:12px 12px 16px; border-top:1px solid var(--border-g); }
+.mon-status {
+  display:flex; align-items:center; gap:9px;
+  padding:10px 13px; background:var(--white);
+  border:1px solid var(--border-g); border-radius:12px;
+  margin-bottom:9px; box-shadow:var(--shadow-soft);
+}
+.pulse-dot { width:8px; height:8px; border-radius:50%; background:var(--ink4); flex-shrink:0; transition:all .3s; }
+.pulse-dot.on {
+  background:var(--emerald);
+  animation:pulsate 2s ease-out infinite;
+}
+@keyframes pulsate {
+  0%   { box-shadow:0 0 0 0 rgba(16,185,129,.5); }
+  70%  { box-shadow:0 0 0 8px rgba(16,185,129,0); }
+  100% { box-shadow:0 0 0 0 rgba(16,185,129,0); }
+}
+.mon-text { font-size:12px; font-weight:500; color:var(--ink2); }
+.btn-logout {
+  width:100%; padding:9px; background:transparent;
+  border:1.5px solid var(--border-g2); border-radius:10px;
+  color:var(--ink3); font-size:12px; font-weight:500;
+  font-family:var(--sans); cursor:pointer; transition:all .18s;
+}
+.btn-logout:hover { background:rgba(244,63,94,.06); border-color:var(--rose); color:var(--rose); }
+
+/* ── MAIN ── */
+.main {
+  margin-left: var(--sb-width);
+  min-height: 100vh;
+  padding: 28px 32px;
+  transition: margin-left .2s ease;
+}
+
+/* ── PAGES ── */
+.page { display:none; animation:slideIn .25s ease; }
+.page.active { display:block; }
+@keyframes slideIn {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ── PAGE HEADER ── */
+.ph { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:26px; flex-wrap:wrap; gap:12px; }
+.ph-left h2 { font-size:24px; font-weight:800; color:var(--ink); letter-spacing:-.5px; }
+.ph-left p  { font-size:12px; color:var(--ink3); margin-top:3px; }
+.ph-right   { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+/* ── BUTTONS ── */
+.btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:9px 18px; border-radius:10px;
+  font-size:13px; font-weight:600; font-family:var(--sans);
+  cursor:pointer; transition:all .18s; border:none; white-space:nowrap;
+}
+.btn:active { transform:scale(.97); }
+.btn-base { background:var(--white); border:1.5px solid var(--border-g2); color:var(--ink2); }
+.btn-base:hover { border-color:var(--blue2); color:var(--blue); box-shadow:var(--shadow-soft); }
+.btn-primary { background:var(--g-blue); color:#fff; box-shadow:0 4px 16px rgba(67,97,238,.3); }
+.btn-primary:hover { box-shadow:0 8px 24px rgba(67,97,238,.45); transform:translateY(-1px); }
+.btn-danger { background:linear-gradient(135deg,#fee2e2,#fecaca); border:1.5px solid #fca5a5; color:var(--rose); }
+.btn-danger:hover { background:var(--g-rose); color:#fff; border-color:transparent; box-shadow:0 6px 18px rgba(244,63,94,.3); }
+.btn-success { background:linear-gradient(135deg,#d1fae5,#a7f3d0); border:1.5px solid #6ee7b7; color:#047857; }
+.btn-success:hover { background:var(--g-green); color:#fff; border-color:transparent; box-shadow:0 6px 18px rgba(16,185,129,.3); }
+.btn-warn { background:linear-gradient(135deg,#fef3c7,#fde68a); border:1.5px solid #fcd34d; color:#92400e; }
+.btn-warn:hover { background:var(--g-amber); color:#fff; border-color:transparent; }
+.btn-violet { background:linear-gradient(135deg,#ede9fe,#ddd6fe); border:1.5px solid #c4b5fd; color:var(--violet); }
+.btn-violet:hover { background:var(--g-violet); color:#fff; border-color:transparent; box-shadow:0 6px 18px rgba(124,58,237,.3); }
+.btn-sm { padding:6px 13px; font-size:12px; border-radius:8px; }
+.btn-xs { padding:4px 10px; font-size:11px; border-radius:7px; }
+
+/* ── GLASS CARD ── */
+.gcard {
+  background: var(--glass2);
+  border: 1px solid var(--border-g);
+  border-radius: var(--r3);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(16px);
+  transition: all .2s;
+}
+.gcard:hover { box-shadow:var(--shadow-lift); transform:translateY(-2px); }
+.gcard-pad { padding:22px 24px; }
+.card-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.card-title { font-size:14px; font-weight:700; color:var(--ink); }
+
+/* ── STAT CARDS ── */
+.stats-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:14px; margin-bottom:24px; }
+.sc {
+  border-radius:20px; padding:20px 22px;
+  position:relative; overflow:hidden;
+  box-shadow: var(--shadow-soft);
+  transition:all .22s; cursor:default;
+}
+.sc:hover { transform:translateY(-3px) scale(1.01); box-shadow:var(--shadow-lift); }
+.sc-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; opacity:.75; margin-bottom:10px; }
+.sc-val { font-size:28px; font-weight:800; font-family:var(--mono); letter-spacing:-1px; }
+.sc-val small { font-size:14px; font-weight:500; font-family:var(--sans); opacity:.7; }
+.sc-foot { font-size:11px; opacity:.65; margin-top:6px; font-weight:500; }
+.sc-icon { position:absolute; right:16px; top:50%; transform:translateY(-50%); font-size:32px; opacity:.2; }
+.sc-blue   { background:var(--g-blue);   color:#fff; }
+.sc-violet { background:var(--g-violet); color:#fff; }
+.sc-green  { background:var(--g-green);  color:#fff; }
+.sc-rose   { background:var(--g-rose);   color:#fff; }
+.sc-amber  { background:var(--g-amber);  color:#fff; }
+.sc-cyan   { background:var(--g-cyan);   color:#fff; }
+
+/* ── SERVER CARDS ── */
+.sv-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
+.sv-card {
+  background:var(--glass2); border:1px solid var(--border-g);
+  border-radius:20px; padding:20px 22px;
+  box-shadow:var(--shadow-soft); transition:all .22s;
+  position:relative; overflow:hidden;
+}
+.sv-card:hover { box-shadow:var(--shadow-lift); transform:translateY(-2px); border-color:var(--border-g2); }
+.sv-card-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:13px; }
+.sv-name { font-size:15px; font-weight:700; color:var(--ink); }
+.sv-meta { display:flex; align-items:center; gap:6px; margin-top:4px; flex-wrap:wrap; }
+.badge { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.b-run  { background:#d1fae5; color:#047857; }
+.b-off  { background:#fee2e2; color:#b91c1c; }
+.b-init { background:#fef3c7; color:#92400e; }
+.b-type { background:rgba(67,97,238,.1); color:var(--blue); border:1px solid rgba(67,97,238,.2); }
+.sv-ip { display:flex; align-items:center; gap:8px; margin-bottom:15px; }
+.sv-ip-val { font-family:var(--mono); font-size:13px; font-weight:600; color:var(--blue); background:rgba(67,97,238,.08); padding:4px 12px; border-radius:8px; }
+.sv-ip-copy { background:none; border:none; cursor:pointer; font-size:13px; color:var(--ink3); padding:4px; border-radius:6px; transition:all .15s; }
+.sv-ip-copy:hover { background:rgba(67,97,238,.1); color:var(--blue); }
+.tbar-hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:7px; }
+.tbar-lbl { font-size:11px; font-weight:600; color:var(--ink3); text-transform:uppercase; letter-spacing:.4px; }
+.tbar-pct { font-family:var(--mono); font-size:13px; font-weight:700; }
+.tbar-track { height:6px; background:rgba(67,97,238,.1); border-radius:99px; overflow:hidden; }
+.tbar-fill { height:100%; border-radius:99px; transition:width .7s cubic-bezier(.34,1.56,.64,1); }
+.tf-0 { background:var(--g-green); }
+.tf-1 { background:var(--g-amber); }
+.tf-2 { background:var(--g-orange); }
+.tf-3 { background:var(--g-rose); }
+.tbar-detail { font-size:11px; color:var(--ink4); margin-top:5px; font-family:var(--mono); }
+.sv-foot { display:flex; align-items:center; justify-content:space-between; padding-top:14px; border-top:1px solid var(--border-g); margin-top:14px; }
+.sv-tags { display:flex; gap:5px; flex-wrap:wrap; }
+.tag { font-size:10px; padding:3px 9px; background:rgba(67,97,238,.07); border-radius:6px; color:var(--ink2); font-family:var(--mono); border:1px solid rgba(67,97,238,.12); }
+.tag-snap { background:rgba(124,58,237,.08); color:var(--violet); border-color:rgba(124,58,237,.2); }
+.sv-acts { display:flex; gap:6px; }
+.sv-alert { position:absolute; top:0; left:0; right:0; height:3px; animation:shimmerBar 2s linear infinite; background:linear-gradient(90deg,var(--rose),#fb7185,var(--rose)); background-size:200% 100%; }
+.sv-alert-amber { background:linear-gradient(90deg,var(--amber),#fbbf24,var(--amber)); background-size:200% 100%; }
+@keyframes shimmerBar { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+
+/* ── SNAPSHOTS ── */
+.snap-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(275px,1fr)); gap:14px; }
+.snap-card {
+  background:var(--glass2); border:1px solid var(--border-g);
+  border-radius:18px; padding:18px 20px;
+  display:flex; flex-direction:column; gap:10px;
+  box-shadow:var(--shadow-soft); transition:all .2s;
+}
+.snap-card:hover { box-shadow:var(--shadow-lift); transform:translateY(-2px); }
+.snap-name { font-size:14px; font-weight:700; color:var(--ink); }
+.snap-id { font-family:var(--mono); font-size:11px; color:var(--blue); background:rgba(67,97,238,.08); padding:3px 9px; border-radius:6px; display:inline-block; }
+.snap-meta { font-size:11px; color:var(--ink3); display:flex; gap:10px; flex-wrap:wrap; }
+.snap-acts { display:flex; gap:7px; margin-top:4px; }
+
+/* ── FORMS ── */
+.sg { display:grid; grid-template-columns:repeat(auto-fill,minmax(460px,1fr)); gap:18px; }
+.fg { margin-bottom:16px; }
+.fl { display:block; font-size:11px; font-weight:700; color:var(--ink3); text-transform:uppercase; letter-spacing:.9px; margin-bottom:7px; }
+.fh { font-size:11px; color:var(--ink4); margin-top:4px; line-height:1.5; }
+.inp {
+  width:100%; padding:10px 14px;
+  background:var(--white); border:1.5px solid var(--border-g2);
+  border-radius:10px; color:var(--ink); font-family:var(--mono); font-size:13px;
+  outline:none; transition:all .2s;
+}
+.inp:focus { border-color:var(--blue); box-shadow:0 0 0 4px rgba(67,97,238,.1); }
+select.inp { cursor:pointer; }
+textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
+
+/* Toggle */
+.tog-row { display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border-g); }
+.tog-row:last-of-type { border-bottom:none; }
+.tog-lbl  { font-size:13px; font-weight:600; color:var(--ink); }
+.tog-desc { font-size:11px; color:var(--ink3); margin-top:2px; }
+.tog-sw {
+  position:relative; width:42px; height:24px;
+  background:var(--ink4); border-radius:99px;
+  cursor:pointer; transition:all .25s; flex-shrink:0;
+}
+.tog-sw.on { background:var(--g-blue); }
+.tog-sw::after {
+  content:''; position:absolute; top:3px; left:3px;
+  width:18px; height:18px; border-radius:50%; background:#fff;
+  transition:all .25s; box-shadow:0 2px 6px rgba(0,0,0,.18);
+}
+.tog-sw.on::after { left:calc(100% - 21px); }
+
+/* Chips */
+.chips { display:flex; flex-wrap:wrap; gap:7px; margin-top:7px; }
+.chip { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:99px; background:rgba(67,97,238,.08); border:1.5px solid rgba(67,97,238,.2); font-family:var(--mono); font-size:11px; color:var(--blue); font-weight:600; }
+.chip-x { font-size:14px; color:var(--ink3); cursor:pointer; line-height:1; transition:color .15s; }
+.chip-x:hover { color:var(--rose); }
+
+/* ── VERTEX ── */
+.dl-list-wrap { display:flex; flex-direction:column; gap:10px; }
+.dl-card {
+  display:flex; align-items:center; gap:14px;
+  background:var(--white); border:1px solid var(--border-g);
+  border-radius:14px; padding:14px 18px;
+  box-shadow:var(--shadow-soft); transition:all .2s;
+}
+.dl-card.h-card { border-color:rgba(67,97,238,.25); background:linear-gradient(135deg,rgba(67,97,238,.04),rgba(255,255,255,.95)); }
+.dl-card:hover { box-shadow:var(--shadow-lift); }
+.dl-indicator { width:9px; height:9px; border-radius:50%; background:var(--ink4); flex-shrink:0; }
+.dl-indicator.live { background:var(--emerald); box-shadow:0 0 0 3px rgba(16,185,129,.2); }
+.dl-info { flex:1; min-width:0; }
+.dl-alias { font-size:13px; font-weight:700; color:var(--ink); }
+.dl-url   { font-size:11px; color:var(--ink3); font-family:var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+.dl-ip-tag { font-family:var(--mono); font-size:12px; font-weight:700; color:var(--cyan); background:rgba(14,165,233,.1); border:1px solid rgba(14,165,233,.2); padding:4px 11px; border-radius:8px; flex-shrink:0; }
+.dl-h-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:6px; background:rgba(67,97,238,.1); color:var(--blue); border:1px solid rgba(67,97,238,.2); flex-shrink:0; }
+
+/* ── CATALOG ── */
+.cat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }
+.ct-card {
+  background:var(--glass2); border:1.5px solid var(--border-g);
+  border-radius:16px; padding:16px 18px;
+  box-shadow:var(--shadow-soft); transition:all .2s; cursor:pointer;
+}
+.ct-card:hover { box-shadow:var(--shadow-lift); transform:translateY(-2px); border-color:var(--blue2); }
+.ct-card.sel { background:linear-gradient(135deg,rgba(67,97,238,.1),rgba(115,139,255,.07)); border-color:var(--blue); }
+.ct-name { font-family:var(--mono); font-size:15px; font-weight:700; color:var(--ink); margin-bottom:10px; display:flex; align-items:center; gap:7px; }
+.ct-series { font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px; }
+.ct-specs { display:flex; flex-wrap:wrap; gap:5px; }
+.ct-spec { font-size:10px; padding:3px 8px; background:rgba(67,97,238,.07); border-radius:6px; color:var(--ink2); border:1px solid rgba(67,97,238,.12); }
+.ct-traffic { font-size:10px; color:var(--cyan); margin-top:7px; font-weight:600; }
+.ct-check { font-size:10px; color:var(--emerald); font-weight:700; margin-top:6px; }
+
+/* ── SCHEDULE ── */
+.sch-timeline {
+  display:flex; align-items:center;
+  background:var(--white); border:1px solid var(--border-g);
+  border-radius:20px; padding:22px 28px; margin-bottom:22px;
+  box-shadow:var(--shadow-soft);
+}
+.sch-tl-item { flex:1; text-align:center; }
+.sch-tl-time { font-family:var(--mono); font-size:32px; font-weight:800; color:var(--ink); }
+.sch-tl-lab  { font-size:12px; color:var(--ink3); margin-top:5px; font-weight:500; }
+.sch-tl-badge { display:inline-block; font-size:10px; font-weight:700; padding:3px 9px; border-radius:99px; margin-top:6px; }
+.sch-tl-sep { flex:0.3; text-align:center; color:var(--ink4); font-size:22px; padding:0 10px; }
+.sch-tl-gap { font-size:11px; color:var(--ink3); margin-top:4px; font-weight:500; }
+.task-card {
+  background:var(--glass2); border:1px solid var(--border-g);
+  border-radius:20px; padding:22px 24px;
+  box-shadow:var(--shadow-soft);
+  position:relative; overflow:hidden;
+}
+.task-card::before {
+  content:''; position:absolute; top:0; left:0; bottom:0; width:4px; border-radius:4px 0 0 4px;
+}
+.task-del::before { background:var(--g-rose); }
+.task-cre::before { background:var(--g-green); }
+.task-card-hd { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+.task-icon-box {
+  width:40px; height:40px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;
+}
+.task-del .task-icon-box { background:linear-gradient(135deg,#fee2e2,#fecaca); }
+.task-cre .task-icon-box { background:linear-gradient(135deg,#d1fae5,#a7f3d0); }
+.task-title { font-size:14px; font-weight:700; color:var(--ink); }
+.task-sub   { font-size:11px; color:var(--ink3); margin-top:2px; }
+.task-foot  { display:flex; align-items:center; justify-content:space-between; padding-top:13px; border-top:1px solid var(--border-g); margin-top:14px; }
+.task-last  { font-size:11px; color:var(--ink3); font-weight:500; }
+
+/* ── LOGS ── */
+.log-box {
+  background:var(--white); border:1px solid var(--border-g);
+  border-radius:16px; font-family:var(--mono); font-size:12px;
+  height:480px; overflow-y:auto; padding:16px;
+  box-shadow:var(--shadow-soft);
+}
+.log-row { display:flex; gap:10px; padding:3px 0; line-height:1.6; }
+.log-t   { color:var(--ink4); flex-shrink:0; min-width:56px; }
+.log-m.info  { color:var(--ink2); }
+.log-m.warn  { color:#b45309; }
+.log-m.error { color:var(--rose); }
+
+/* ── MODAL ── */
+.modal-bg {
+  position:fixed; inset:0; z-index:200;
+  background:rgba(26,32,64,.35); backdrop-filter:blur(6px);
+  display:none; align-items:center; justify-content:center;
+}
+.modal-bg.open { display:flex; }
+.modal-box {
+  background:var(--white); border:1px solid var(--border-g2);
+  border-radius:24px; padding:30px 32px; width:500px;
+  max-width:92vw; max-height:84vh; overflow-y:auto;
+  box-shadow:var(--shadow-float); animation:popIn .22s ease;
+}
+.modal-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
+.modal-ttl { font-size:17px; font-weight:800; color:var(--ink); }
+.modal-x { background:rgba(67,97,238,.07); border:none; color:var(--ink2); font-size:19px; cursor:pointer; width:30px; height:30px; border-radius:8px; transition:all .15s; }
+.modal-x:hover { background:rgba(244,63,94,.1); color:var(--rose); }
+
+/* ── TOAST ── */
+.toast-wrap { position:fixed; bottom:22px; right:22px; z-index:999; display:flex; flex-direction:column; gap:8px; }
+.toast {
+  background:var(--white); border:1px solid var(--border-g2);
+  border-radius:14px; padding:12px 18px; font-size:13px; font-weight:500;
+  min-width:230px; box-shadow:var(--shadow-float);
+  animation:popIn .25s cubic-bezier(.34,1.56,.64,1);
+  display:flex; align-items:center; gap:10px; color:var(--ink);
+}
+.toast.ok  { border-left:4px solid var(--emerald); }
+.toast.err { border-left:4px solid var(--rose); }
+.toast.wrn { border-left:4px solid var(--amber); }
+
+/* ── MISC ── */
+.loading { display:flex; align-items:center; gap:12px; justify-content:center; padding:50px; color:var(--ink3); font-size:13px; }
+.spin { width:20px; height:20px; border:2.5px solid var(--border-g2); border-top-color:var(--blue); border-radius:50%; animation:rotate .7s linear infinite; }
+@keyframes rotate { to { transform:rotate(360deg); } }
+.empty { text-align:center; padding:60px 20px; }
+.empty-icon { font-size:40px; margin-bottom:14px; }
+.empty h3 { font-size:16px; font-weight:700; color:var(--ink); margin-bottom:7px; }
+.empty p  { font-size:13px; color:var(--ink3); }
+.section-sep { height:1px; background:var(--border-g); margin:20px 0; }
+.info-box {
+  background:linear-gradient(135deg,rgba(67,97,238,.05),rgba(115,139,255,.04));
+  border:1px solid rgba(67,97,238,.18); border-radius:14px;
+  padding:13px 16px; font-size:12px; color:var(--ink2); line-height:1.7;
+}
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border-g2); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--ink4); }
+
+/* ── 侧边栏宽度调节手柄 ── */
+.sb-resize-handle {
+  position: fixed;
+  top: 0; bottom: 0;
+  left: var(--sb-width);
+  width: 6px;
+  cursor: col-resize;
+  z-index: 60;
+  background: transparent;
+  transition: background .15s;
+}
+.sb-resize-handle:hover,
+.sb-resize-handle.dragging {
+  background: rgba(67,97,238,.2);
+}
+
+/* ── 侧边栏宽度指示条 ── */
+.sb-width-indicator {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+  z-index: 100;
+  white-space: nowrap;
+}
+.sb-width-indicator.show { opacity: 1; }
+
+/* ── 响应式断点 ── */
+
+/* 大屏（>1400px）：侧边栏可更宽，内容更舒展 */
+@media(min-width:1400px) {
+  .stats-row { grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); }
+  .sv-grid   { grid-template-columns: repeat(auto-fill, minmax(380px,1fr)); }
+}
+
+/* 中等屏幕（861px~1100px）：保持侧边栏，内容区适当收窄 */
+@media(max-width:1100px) {
+  .main { padding: 22px 20px; }
+  .sg { grid-template-columns: 1fr; }
+}
+
+/* 小屏（≤860px）：浮层侧边栏模式 */
+@media(max-width:860px) {
+  /* 显示汉堡按钮 */
+  .hamburger { display: flex; }
+
+  /* 侧边栏默认隐藏，滑入；z-index:52 高于遮罩(48)，关闭时禁止点击穿透 */
+  .sidebar {
+    transform: translateX(-100%);
+    width: 240px !important;
+    box-shadow: none;
+    z-index: 52;
+    pointer-events: none;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-float);
+    pointer-events: auto;
+  }
+
+  /* 主内容区占满 */
+  .main {
+    margin-left: 0 !important;
+    padding: 16px 14px;
+    padding-top: 64px;
+  }
+
+  /* 拖动手柄隐藏 */
+  .sb-resize-handle { display: none; }
+
+  /* 标题区自适应 */
+  .ph { flex-direction: column; align-items: flex-start; }
+  .ph-left h2 { font-size: 20px; }
+  .ph-right { width: 100%; overflow-x: auto; padding-bottom: 4px; }
+
+  /* 统计卡：手机上两列 */
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sc { padding: 14px 16px; border-radius: 16px; }
+  .sc-val { font-size: 22px; }
+  .sc-icon { font-size: 24px; }
+
+  /* 服务器卡单列 */
+  .sv-grid { grid-template-columns: 1fr; }
+  .snap-grid { grid-template-columns: 1fr; }
+
+  /* 调度器时间线竖排 */
+  .sch-timeline { flex-direction: column; gap: 16px; padding: 16px; }
+  .sch-tl-sep { transform: rotate(90deg); }
+
+  /* 定时任务卡竖排 */
+  #page-schedule > div:last-of-type { grid-template-columns: 1fr !important; }
+  #page-schedule > .info-box + div,
+  #page-schedule > div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+
+  /* 表单网格 */
+  .sg { grid-template-columns: 1fr; }
+  .cat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* Toast 底部居中 */
+  .toast-wrap { right: 14px; left: 14px; bottom: 14px; }
+  .toast { min-width: 0; }
+
+  /* 登录卡适配 */
+  .login-card { width: 92vw; padding: 32px 24px; border-radius: 20px; }
+
+  /* Modal 适配 */
+  .modal-box { padding: 22px 18px; border-radius: 18px; }
+}
+
+/* 超小屏（≤400px）*/
+@media(max-width:400px) {
+  .stats-row { grid-template-columns: 1fr; }
+  .cat-grid  { grid-template-columns: 1fr; }
+  .ph-right  { flex-wrap: wrap; }
+  .btn { font-size: 12px; padding: 8px 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- 汉堡菜单按钮（仅移动端显示） -->
+<button class="hamburger" id="ham-btn" onclick="toggleSidebar()" aria-label="打开菜单">☰</button>
+
+<!-- 侧边栏遮罩 -->
+<div class="sb-overlay" id="sb-overlay" onclick="toggleSidebar()"></div>
+
+<!-- 侧边栏宽度调节手柄 -->
+<div class="sb-resize-handle" id="sb-resize-handle" title="拖动调整侧边栏宽度"></div>
+
+<!-- 宽度指示 -->
+<div class="sb-width-indicator" id="sb-width-indicator"></div>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="lbox-brand">
+      <div class="lbox-orb">☁️</div>
+      <div>
+        <div class="lbox-name">Hetzner Manager</div>
+        <div class="lbox-sub">Cloud Infrastructure Panel</div>
+      </div>
+    </div>
+    <div class="lbox-greeting">欢迎回来 👋</div>
+    <div class="lbox-hint">请输入访问密码继续</div>
+    <div class="lf-group">
+      <label class="lf-label">访问密码</label>
+      <input type="password" class="lf-input" id="lpwd" placeholder="••••••••">
+    </div>
+    <button class="btn-auth" onclick="doLogin()">进入控制台 →</button>
+    <div class="auth-err" id="lerr">⚠️ 密码不正确，请重试</div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div class="toast-wrap" id="toasts"></div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <div class="modal-ttl" id="modal-title"></div>
+      <button class="modal-x" onclick="closeModal()">×</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <nav class="sidebar" id="sidebar">
+    <div class="sb-head">
+      <div class="sb-brand">
+        <div class="sb-orb">☁️</div>
+        <div>
+          <div class="sb-title">Hetzner Mgr</div>
+          <div class="sb-ver">v2.1 ✨</div>
+        </div>
+      </div>
+    </div>
+    <div class="sb-nav">
+      <div class="sb-section">
+        <div class="sb-cat">监控</div>
+        <div class="nav-item active" data-p="dashboard" onclick="nav('dashboard')"><span class="nav-icon">📊</span><span>仪表盘</span></div>
+        <div class="nav-item" data-p="servers" onclick="nav('servers')"><span class="nav-icon">🖥</span><span>服务器</span></div>
+        <div class="nav-item" data-p="snapshots" onclick="nav('snapshots')"><span class="nav-icon">💾</span><span>快照镜像</span></div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-cat">工具</div>
+        <div class="nav-item" data-p="vertex" onclick="nav('vertex')"><span class="nav-icon">🔌</span><span>Vertex 下载器</span></div>
+        <div class="nav-item" data-p="catalog" onclick="nav('catalog')"><span class="nav-icon">📋</span><span>型号参考</span></div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-cat">系统</div>
+        <div class="nav-item" data-p="schedule" onclick="nav('schedule')"><span class="nav-icon">⏰</span><span>定时任务</span></div>
+        <div class="nav-item" data-p="monitor-cfg" onclick="nav('monitor-cfg')"><span class="nav-icon">🔧</span><span>监控配置</span></div>
+        <div class="nav-item" data-p="logs" onclick="nav('logs')"><span class="nav-icon">📋</span><span>运行日志</span></div>
+        <div class="nav-item" data-p="settings" onclick="nav('settings')"><span class="nav-icon">⚙️</span><span>系统设置</span></div>
+      </div>
+    </div>
+    <div class="sb-foot">
+      <div class="mon-status">
+        <div class="pulse-dot" id="mon-dot"></div>
+        <span class="mon-text" id="mon-label">监控未启动</span>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">退出登录</button>
+    </div>
+  </nav>
+
+  <main class="main">
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="ph">
+        <div class="ph-left"><h2>仪表盘 ✨</h2><p>服务器流量实时监控总览</p></div>
+        <div class="ph-right">
+          <span id="last-check-txt" style="font-size:11px;color:var(--ink3);"></span>
+          <button class="btn btn-base" onclick="refreshServers(true)">🔄 刷新</button>
+          <button class="btn btn-warn btn-sm" onclick="checkNow()">⚡ 立即检查</button>
+          <button class="btn btn-primary" id="mon-btn" onclick="toggleMon()">▶ 启动监控</button>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="sc sc-blue"><div class="sc-label">总服务器</div><div class="sc-val" id="s-total">—</div><div class="sc-foot">当前实例数</div><div class="sc-icon">🖥</div></div>
+        <div class="sc sc-green"><div class="sc-label">运行中</div><div class="sc-val" id="s-run">—</div><div class="sc-foot">状态正常</div><div class="sc-icon">✅</div></div>
+        <div class="sc sc-rose"><div class="sc-label">高流量预警</div><div class="sc-val" id="s-high">—</div><div class="sc-foot" id="s-thr-lbl">超过阈值</div><div class="sc-icon">🚨</div></div>
+        <div class="sc sc-amber"><div class="sc-label">总出站流量</div><div class="sc-val" id="s-traffic">—<small>GB</small></div><div class="sc-foot">全部合计</div><div class="sc-icon">📡</div></div>
+        <div class="sc sc-violet"><div class="sc-label">下次检查</div><div class="sc-val" id="s-next" style="font-size:18px;">—</div><div class="sc-foot">自动监控</div><div class="sc-icon">⏱</div></div>
+        <div class="sc sc-cyan"><div class="sc-label">定时调度器</div><div class="sc-val" id="s-sched" style="font-size:18px;">—</div><div class="sc-foot" id="s-sched-sub">定时任务状态</div><div class="sc-icon">⏰</div></div>
+      </div>
+      <div id="dash-servers"><div class="loading"><div class="spin"></div> 加载中…</div></div>
+    </div>
+
+    <!-- SERVERS -->
+    <div class="page" id="page-servers">
+      <div class="ph">
+        <div class="ph-left"><h2>服务器管理</h2><p>创建、删除、重建实例</p></div>
+        <div class="ph-right">
+          <button class="btn btn-base" onclick="refreshServers(true)">🔄 刷新</button>
+          <button class="btn btn-primary" onclick="openCreateModal()">＋ 创建服务器</button>
+        </div>
+      </div>
+      <div id="sv-list"><div class="loading"><div class="spin"></div></div></div>
+    </div>
+
+    <!-- SNAPSHOTS -->
+    <div class="page" id="page-snapshots">
+      <div class="ph">
+        <div class="ph-left"><h2>快照 & 镜像</h2><p>可用于创建服务器的镜像</p></div>
+        <div class="ph-right">
+          <select class="inp" id="img-type" onchange="loadImages()" style="width:120px;padding:8px 12px;">
+            <option value="snapshot">快照</option>
+            <option value="system">系统镜像</option>
+            <option value="backup">备份</option>
+          </select>
+          <button class="btn btn-base" onclick="loadImages()">🔄 刷新</button>
+        </div>
+      </div>
+      <div id="snap-list"><div class="loading"><div class="spin"></div></div></div>
+    </div>
+
+    <!-- VERTEX -->
+    <div class="page" id="page-vertex">
+      <div class="ph">
+        <div class="ph-left"><h2>Vertex 下载器</h2><p>管理下载器 IP 与 Hetzner 同步</p></div>
+        <div class="ph-right">
+          <button class="btn btn-base" onclick="loadVertex()">🔄 刷新</button>
+          <button class="btn btn-warn" onclick="vertexSyncNow()">⚡ 立即同步IP</button>
+          <button class="btn btn-violet" onclick="vertexTest()">🔗 测试连接</button>
+        </div>
+      </div>
+      <div class="gcard gcard-pad" style="margin-bottom:18px;">
+        <div class="card-hd"><div class="card-title">⚙️ 连接配置</div><button class="btn btn-primary btn-sm" onclick="saveVertexCfg()">保存</button></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+          <div class="fg"><label class="fl">入口地址</label><input class="inp" id="vcfg-url" placeholder="http://23.82.99.203:3077"></div>
+          <div class="fg"><label class="fl">匹配关键词</label><input class="inp" id="vcfg-kw" placeholder="Hetzner"><div class="fh">只同步 alias 包含该关键词的下载器</div></div>
+        </div>
+        <div class="fg"><label class="fl">Cookie 认证</label><textarea class="inp" id="vcfg-cookies" rows="2" placeholder="connect.sid=s%3A..."></textarea><div class="fh">留空则使用已保存的 Cookie</div></div>
+        <div id="vertex-conn-status" style="display:flex;gap:8px;align-items:center;margin-top:4px;"></div>
+      </div>
+      <div class="gcard gcard-pad" style="margin-bottom:18px;">
+        <div class="card-hd"><div class="card-title">🔄 自动同步</div><div class="tog-sw" id="tog-vertex-sync" onclick="toggleField('vertex_sync_enabled','tog-vertex-sync')"></div></div>
+        <p style="font-size:12px;color:var(--ink3);margin-bottom:12px;">开启后：创建/重建/定时创建服务器时自动同步新 IP 给下载器</p>
+        <div id="vertex-last-sync" style="font-size:12px;color:var(--ink3);"></div>
+      </div>
+      <div class="gcard gcard-pad">
+        <div class="card-hd"><div class="card-title">📡 下载器列表</div><span style="font-size:11px;color:var(--ink3);" id="dl-count-txt"></span></div>
+        <div id="dl-list"><div class="loading"><div class="spin"></div></div></div>
+      </div>
+    </div>
+
+    <!-- CATALOG -->
+    <div class="page" id="page-catalog">
+      <div class="ph">
+        <div class="ph-left"><h2>服务器型号参考</h2><p>点击型号可添加到优先级列表</p></div>
+        <div class="ph-right">
+          <select class="inp" id="cat-filter" onchange="renderCatalog()" style="width:110px;padding:8px 12px;">
+            <option value="">全部系列</option>
+            <option value="CX">CX 系列</option>
+            <option value="CPX">CPX 系列</option>
+            <option value="CAX">CAX 系列</option>
+          </select>
+        </div>
+      </div>
+      <div class="info-box" style="margin-bottom:16px;">
+        💡 点击型号卡片可添加到监控配置的重建优先级列表。当前优先级：<span id="cat-current-types" style="color:var(--blue);font-family:var(--mono);font-weight:700;"></span>
+      </div>
+      <div class="cat-grid" id="catalog-grid"></div>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div class="page" id="page-schedule">
+      <div class="ph">
+        <div class="ph-left"><h2>定时任务</h2><p>每天定时删除/创建服务器</p></div>
+        <div class="ph-right">
+          <button class="btn btn-base" id="sched-toggle-btn" onclick="toggleScheduler()">▶ 启动调度器</button>
+          <button class="btn btn-primary" onclick="saveSchedule()">✓ 保存配置</button>
+        </div>
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(67,97,238,.06),rgba(115,139,255,.04));border:1.5px solid rgba(67,97,238,.18);border-radius:20px;padding:18px 22px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--ink);">定时任务总开关</div>
+            <div style="font-size:11px;color:var(--ink3);margin-top:2px;">开启后调度器每 30 秒检查一次，到达设定时刻自动执行</div>
+          </div>
+          <div class="tog-sw" id="tog-sched-master" onclick="toggleScheduleMaster()"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <label class="fl" style="margin:0;white-space:nowrap;">执行时区</label>
+          <select class="inp" id="cfg-tz" style="max-width:280px;" onchange="updateTimeline()">
+            <option value="Asia/Shanghai">Asia/Shanghai（北京 UTC+8）</option>
+            <option value="Asia/Hong_Kong">Asia/Hong_Kong（香港 UTC+8）</option>
+            <option value="Asia/Tokyo">Asia/Tokyo（日本 UTC+9）</option>
+            <option value="Asia/Seoul">Asia/Seoul（韩国 UTC+9）</option>
+            <option value="Asia/Singapore">Asia/Singapore（新加坡 UTC+8）</option>
+            <option value="Europe/Berlin">Europe/Berlin（德国 UTC+1/2）</option>
+            <option value="Europe/London">Europe/London（英国 UTC+0/1）</option>
+            <option value="America/New_York">America/New_York（美东 UTC-5/-4）</option>
+            <option value="America/Los_Angeles">America/Los_Angeles（美西 UTC-8/-7）</option>
+            <option value="UTC">UTC（协调世界时）</option>
+          </select>
+          <div style="font-size:11px;color:var(--ink4);">所有时间均以此时区为准</div>
+        </div>
+        <div style="margin-top:13px;padding:10px 14px;background:var(--white);border-radius:10px;display:flex;gap:20px;flex-wrap:wrap;box-shadow:var(--shadow-soft);">
+          <div style="font-size:11px;color:var(--ink3);">🕐 浏览器时间：<span id="srv-localtime" style="font-family:var(--mono);color:var(--ink);font-weight:600;">—</span></div>
+          <div style="font-size:11px;color:var(--ink3);">📌 保存后由后端确认目标时区时间</div>
+        </div>
+      </div>
+      <div class="sch-timeline">
+        <div class="sch-tl-item">
+          <div class="sch-tl-time" id="tl-delete-time">—:—</div>
+          <div class="sch-tl-lab">🗑️ 定时删除全部机器</div>
+          <div class="sch-tl-badge" id="tl-delete-status" style="background:#fee2e2;color:var(--rose);">未启用</div>
+        </div>
+        <div class="sch-tl-sep"><div>→</div><div class="sch-tl-gap" id="tl-gap-text">间隔</div></div>
+        <div class="sch-tl-item">
+          <div class="sch-tl-time" id="tl-create-time">—:—</div>
+          <div class="sch-tl-lab">🚀 定时批量创建机器</div>
+          <div class="sch-tl-badge" id="tl-create-status" style="background:#d1fae5;color:#047857;">未启用</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;" id="sched-tasks-grid">
+        <div class="task-card task-del">
+          <div class="task-card-hd">
+            <div class="task-icon-box">🗑️</div>
+            <div><div class="task-title">定时删除所有服务器</div><div class="task-sub">每天到达时刻自动删除账户下全部服务器</div></div>
+          </div>
+          <div class="tog-row" style="margin-bottom:12px;">
+            <div><div class="tog-lbl">启用定时删除</div></div>
+            <div class="tog-sw" id="tog-del" onclick="toggleSchedField('schedule_delete_enabled','tog-del',updateTimeline)"></div>
+          </div>
+          <div style="background:var(--sky);border-radius:12px;padding:14px;margin-bottom:12px;">
+            <div style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;">每天执行时刻</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input class="inp" id="cfg-del-h" type="number" min="0" max="23" placeholder="23" style="width:72px;text-align:center;font-size:22px;font-weight:800;padding:9px;" oninput="updateTimeline()">
+              <span style="font-size:28px;color:var(--ink3);font-weight:800;">:</span>
+              <input class="inp" id="cfg-del-m" type="number" min="0" max="59" placeholder="00" style="width:72px;text-align:center;font-size:22px;font-weight:800;padding:9px;" oninput="updateTimeline()">
+              <span style="font-size:12px;color:var(--ink3);margin-left:4px;" id="del-tz-label">时区</span>
+            </div>
+            <div id="del-time-preview" style="font-size:11px;color:var(--ink3);margin-top:8px;"></div>
+          </div>
+          <div style="font-size:11px;color:var(--rose);background:rgba(244,63,94,.06);border:1px solid rgba(244,63,94,.18);border-radius:10px;padding:9px 13px;margin-bottom:12px;">⚠️ 危险操作：将删除账户下所有服务器</div>
+          <div class="task-foot">
+            <div class="task-last" id="del-last-run">上次执行: —</div>
+            <button class="btn btn-danger btn-xs" onclick="triggerDeleteNow()">立即执行</button>
+          </div>
+        </div>
+        <div class="task-card task-cre">
+          <div class="task-card-hd">
+            <div class="task-icon-box">🚀</div>
+            <div><div class="task-title">定时批量创建服务器</div><div class="task-sub">每天到达时刻自动创建若干台服务器</div></div>
+          </div>
+          <div class="tog-row" style="margin-bottom:12px;">
+            <div><div class="tog-lbl">启用定时创建</div></div>
+            <div class="tog-sw" id="tog-cre" onclick="toggleSchedField('schedule_create_enabled','tog-cre',updateTimeline)"></div>
+          </div>
+          <div style="background:var(--sky);border-radius:12px;padding:14px;margin-bottom:12px;">
+            <div style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;">每天执行时刻</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input class="inp" id="cfg-cre-h" type="number" min="0" max="23" placeholder="08" style="width:72px;text-align:center;font-size:22px;font-weight:800;padding:9px;" oninput="updateTimeline()">
+              <span style="font-size:28px;color:var(--ink3);font-weight:800;">:</span>
+              <input class="inp" id="cfg-cre-m" type="number" min="0" max="59" placeholder="00" style="width:72px;text-align:center;font-size:22px;font-weight:800;padding:9px;" oninput="updateTimeline()">
+              <span style="font-size:12px;color:var(--ink3);margin-left:4px;" id="cre-tz-label">时区</span>
+            </div>
+            <div id="cre-time-preview" style="font-size:11px;color:var(--ink3);margin-top:8px;"></div>
+          </div>
+          <div class="fg"><label class="fl">创建台数</label><input class="inp" id="cfg-cre-count" type="number" min="1" max="20" placeholder="3"><div class="fh">每次定时创建的服务器数量</div></div>
+          <div class="fg"><label class="fl">服务器名称前缀</label><input class="inp" id="cfg-cre-prefix" placeholder="hetzner-auto"><div class="fh">生成：前缀-01、前缀-02… 创建后自动同步 Vertex</div></div>
+          <div class="task-foot">
+            <div class="task-last" id="cre-last-run">上次执行: —</div>
+            <button class="btn btn-success btn-xs" onclick="triggerCreateNow()">立即执行</button>
+          </div>
+        </div>
+      </div>
+      <div class="info-box" style="margin-top:16px;line-height:1.9;">
+        📌 <b>工作原理：</b>调度器每 30 秒检查，时区匹配时触发，同一天同一时刻只触发一次。<br>
+        📌 <b>跨日场景：</b>23:00 删除 → 次日 08:00 创建，两任务独立判断不互相依赖。
+      </div>
+    </div>
+
+    <!-- MONITOR-CFG -->
+    <div class="page" id="page-monitor-cfg">
+      <div class="ph">
+        <div class="ph-left"><h2>监控配置</h2><p>流量阈值、自动重建与工作时段</p></div>
+      </div>
+      <div class="sg">
+        <div class="gcard gcard-pad">
+          <div class="card-hd"><div class="card-title">⏱ 监控参数</div></div>
+          <div class="tog-row"><div><div class="tog-lbl">自动重建</div><div class="tog-desc">流量超阈值时自动重建服务器</div></div><div class="tog-sw" id="tog-rebuild" onclick="toggleField('auto_rebuild_enabled','tog-rebuild')"></div></div>
+          <div class="tog-row"><div><div class="tog-lbl">工作时段限制</div><div class="tog-desc">仅在指定时段内运行流量监控</div></div><div class="tog-sw" id="tog-tw" onclick="toggleField('enable_time_window','tog-tw')"></div></div>
+          <div style="height:14px;"></div>
+          <div class="fg"><label class="fl">检查间隔（秒）</label><input class="inp" id="cfg-interval" type="number" min="60" placeholder="1200"><div class="fh">建议 600~3600 秒，默认 1200</div></div>
+          <div class="fg"><label class="fl">流量阈值（0.0~1.0）</label><input class="inp" id="cfg-thr" type="number" min="0.1" max="1" step="0.05" placeholder="0.8"><div class="fh">超过此比例时触发预警/重建</div></div>
+          <div class="fg"><label class="fl">默认地区</label>
+            <select class="inp" id="cfg-loc">
+              <option value="nbg1">nbg1 — 德国纽伦堡</option>
+              <option value="fsn1">fsn1 — 德国法尔肯施泰因</option>
+              <option value="hel1">hel1 — 芬兰赫尔辛基</option>
+              <option value="ash">ash — 美国弗吉尼亚</option>
+              <option value="hil">hil — 美国希尔斯伯勒</option>
+              <option value="sin">sin — 新加坡</option>
+            </select>
+          </div>
+        </div>
+        <div class="gcard gcard-pad">
+          <div class="card-hd"><div class="card-title">🕐 工作时段</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div class="fg"><label class="fl">开始（小时）</label><input class="inp" id="cfg-sh" type="number" min="0" max="23" placeholder="8"></div>
+            <div class="fg"><label class="fl">结束（小时）</label><input class="inp" id="cfg-eh" type="number" min="0" max="23" placeholder="23"></div>
+          </div>
+          <div class="fg"><label class="fl">结束（分钟）</label><input class="inp" id="cfg-em" type="number" min="0" max="59" placeholder="30"></div>
+          <div class="section-sep"></div>
+          <div class="card-hd" style="margin-bottom:10px;"><div class="card-title">🖥 型号重建优先级</div><button class="btn btn-xs btn-base" onclick="nav('catalog')">查看型号 →</button></div>
+          <div class="fh" style="margin-bottom:10px;">按顺序尝试，无货自动跳到下一个。</div>
+          <div class="chips" id="types-chips"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+            <input class="inp" id="type-inp" placeholder="输入型号如 cx43" style="flex:1;">
+            <button class="btn btn-primary btn-sm" onclick="addType()">+ 添加</button>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:10px;">
+        <button class="btn btn-base" onclick="loadMonitorCfg()">↺ 重置</button>
+        <button class="btn btn-primary" onclick="saveMonitorCfg()">✓ 保存配置</button>
+      </div>
+    </div>
+
+    <!-- LOGS -->
+    <div class="page" id="page-logs">
+      <div class="ph">
+        <div class="ph-left"><h2>运行日志</h2><p>监控与操作实时记录</p></div>
+        <div class="ph-right">
+          <button class="btn btn-base" onclick="loadLogs()">🔄 刷新</button>
+          <button class="btn btn-danger btn-sm" onclick="clearLogs()">清空</button>
+        </div>
+      </div>
+      <div class="log-box" id="log-box"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="page" id="page-settings">
+      <div class="ph">
+        <div class="ph-left"><h2>系统设置</h2><p>API 密钥、通知与访问配置</p></div>
+      </div>
+      <div class="sg">
+        <div class="gcard gcard-pad">
+          <div class="card-hd"><div class="card-title">🔑 Hetzner API</div></div>
+          <div class="fg"><label class="fl">API Key</label><input class="inp" id="s-apikey" type="password" placeholder="hcloud_xxx…"><div class="fh" id="s-apikey-hint" style="color:var(--blue);"></div></div>
+          <div class="fg"><label class="fl">默认快照 ID</label><input class="inp" id="s-snap" placeholder="快照数字 ID，用于重建"></div>
+          <div class="fg"><label class="fl">SSH 密钥 IDs（逗号分隔）</label><input class="inp" id="s-ssh" placeholder="12345, 67890"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" onclick="saveApiCfg()">保存</button>
+            <button class="btn btn-base" onclick="testApi()">🔗 测试连接</button>
+          </div>
+        </div>
+        <div class="gcard gcard-pad">
+          <div class="card-hd"><div class="card-title">📨 Telegram 通知</div></div>
+          <div class="fg"><label class="fl">Bot Token</label><input class="inp" id="s-tgt" type="password" placeholder="1234567890:AABBcc…"><div class="fh" id="s-tgt-hint" style="color:var(--blue);"></div></div>
+          <div class="fg"><label class="fl">Chat ID</label><input class="inp" id="s-tgc" placeholder="-100xxxxxxxx"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" onclick="saveTgCfg()">保存</button>
+            <button class="btn btn-base" onclick="testTg()">发送测试</button>
+          </div>
+        </div>
+        <div class="gcard gcard-pad">
+          <div class="card-hd"><div class="card-title">🔐 访问安全</div></div>
+          <div class="fg"><label class="fl">修改密码</label><input class="inp" id="s-pwd" type="password" placeholder="留空则不修改"></div>
+          <button class="btn btn-primary" onclick="savePwd()">更新密码</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ─── 侧边栏宽度拖动调节 ─── */
+(function(){
+  var handle = document.getElementById('sb-resize-handle');
+  var indicator = document.getElementById('sb-width-indicator');
+  var MIN = 180, MAX = 360;
+  var dragging = false, startX = 0, startW = 0;
+  var hideTimer = null;
+
+  function getSbWidth(){
+    return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sb-width')) || 230;
+  }
+  function setSbWidth(w){
+    w = Math.max(MIN, Math.min(MAX, w));
+    document.documentElement.style.setProperty('--sb-width', w + 'px');
+    handle.style.left = w + 'px';
+    indicator.textContent = '侧边栏 ' + w + 'px';
+    indicator.classList.add('show');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function(){ indicator.classList.remove('show'); }, 1200);
+    try { localStorage.setItem('hz_sb_width', w); } catch(e){}
+  }
+
+  /* 恢复上次保存的宽度 */
+  try {
+    var saved = parseInt(localStorage.getItem('hz_sb_width'));
+    if(saved >= MIN && saved <= MAX) setSbWidth(saved);
+  } catch(e){}
+
+  handle.addEventListener('mousedown', function(e){
+    dragging = true;
+    startX = e.clientX;
+    startW = getSbWidth();
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e){
+    if(!dragging) return;
+    setSbWidth(startW + (e.clientX - startX));
+  });
+  document.addEventListener('mouseup', function(){
+    if(!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+  });
+
+  /* 触摸设备 */
+  handle.addEventListener('touchstart', function(e){
+    dragging = true;
+    startX = e.touches[0].clientX;
+    startW = getSbWidth();
+    e.preventDefault();
+  }, {passive:false});
+  document.addEventListener('touchmove', function(e){
+    if(!dragging) return;
+    setSbWidth(startW + (e.touches[0].clientX - startX));
+  }, {passive:true});
+  document.addEventListener('touchend', function(){
+    dragging = false;
+  });
+})();
+
+/* ─── 移动端侧边栏浮层 ─── */
+function toggleSidebar(){
+  var sb = document.getElementById('sidebar');
+  var ov = document.getElementById('sb-overlay');
+  var open = sb.classList.toggle('open');
+  if(open){ ov.classList.add('open'); }
+  else { ov.classList.remove('open'); }
+}
+function closeSidebarOnMobile(){
+  if(window.innerWidth <= 860){
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sb-overlay').classList.remove('open');
+  }
+}
+
+/* ─── 定时任务两列/单列响应式 ─── */
+function updateSchedGrid(){
+  var grid = document.getElementById('sched-tasks-grid');
+  if(!grid) return;
+  grid.style.gridTemplateColumns = window.innerWidth <= 860 ? '1fr' : '1fr 1fr';
+}
+window.addEventListener('resize', updateSchedGrid);
+
+/* ─── 核心逻辑（原版） ─── */
+const S={servers:[],config:{},catalog:{},serverTypes:[],monitorRunning:false,pollTimer:null};
+async function api(path,method='GET',body=null){const opts={method,credentials:'include',headers:{'Content-Type':'application/json'}};if(body)opts.body=JSON.stringify(body);const r=await fetch('/api'+path,opts);const d=await r.json();if(r.status===401){showLogin();throw new Error('Unauth');}return{ok:r.ok,status:r.status,data:d};}
+function toast(msg,type='ok'){const icons={ok:'✅',err:'❌',wrn:'⚠️'};const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`<span>${icons[type]}</span><span>${msg}</span>`;document.getElementById('toasts').appendChild(el);setTimeout(()=>el.remove(),3800);}
+async function checkAuth(){try{const r=await fetch('/api/auth/status',{credentials:'include'});const d=await r.json();if(d.authenticated)showApp();else showLogin();}catch{showLogin();}}
+async function doLogin(){const pwd=document.getElementById('lpwd').value;const r=await fetch('/api/login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});const d=await r.json();if(r.ok){showApp();initApp();}else{document.getElementById('lerr').style.display='block';}}
+document.getElementById('lpwd').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+async function doLogout(){await api('/logout','POST');showLogin();}
+function showLogin(){document.getElementById('login-screen').style.display='flex';document.getElementById('app').classList.remove('show');}
+function showApp(){document.getElementById('login-screen').style.display='none';document.getElementById('app').classList.add('show');}
+function nav(page){
+  closeSidebarOnMobile();
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  const ni=document.querySelector(`[data-p="${page}"]`);if(ni)ni.classList.add('active');
+  document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+  const pg=document.getElementById(`page-${page}`);if(pg)pg.classList.add('active');
+  const actions={dashboard:()=>refreshServers(),servers:()=>refreshServers(),snapshots:()=>loadImages(),vertex:()=>{loadVertex();loadVertexCfg();},catalog:()=>renderCatalog(),schedule:()=>{loadScheduleCfg();updateSchedGrid();},'monitor-cfg':()=>loadMonitorCfg(),logs:()=>loadLogs(),settings:()=>loadSettings()};
+  actions[page]?.();
+}
+async function initApp(){await loadConfig();await loadCatalog();await refreshServers();await checkMonitor();startPoll();updateSchedGrid();}
+async function loadConfig(){const{data}=await api('/config');S.config=data;S.serverTypes=data.server_types||['cx43'];return data;}
+async function loadCatalog(){const{data}=await api('/config/server-type-catalog');S.catalog=data.catalog||{};}
+async function checkMonitor(){const{data}=await api('/monitor/status');S.monitorRunning=data.running;updateMonUI(data);updateSchedStatus(data);}
+function updateMonUI(data){const dot=document.getElementById('mon-dot'),lbl=document.getElementById('mon-label'),btn=document.getElementById('mon-btn');if(S.monitorRunning){dot.className='pulse-dot on';lbl.textContent='监控运行中';btn.textContent='⏹ 停止监控';btn.className='btn btn-danger';}else{dot.className='pulse-dot';lbl.textContent='监控未启动';btn.textContent='▶ 启动监控';btn.className='btn btn-primary';}if(data?.last_check){const d=new Date(data.last_check);document.getElementById('last-check-txt').textContent=`上次: ${d.toLocaleTimeString('zh-CN')}`;}if(data?.next_check){const d=new Date(data.next_check);const now=new Date();const diff=Math.max(0,Math.round((d-now)/1000));document.getElementById('s-next').textContent=diff>0?`${diff}s`:'即将';}}
+function updateSchedStatus(data){const el=document.getElementById('s-sched'),sub=document.getElementById('s-sched-sub'),btn=document.getElementById('sched-toggle-btn');if(!el)return;const running=data?.scheduler_running;el.textContent=running?'运行中':'已停止';if(sub)sub.textContent=running?'定时调度器运行中':'点击定时任务配置';if(btn){btn.textContent=running?'⏹ 停止调度器':'▶ 启动调度器';btn.className=running?'btn btn-danger':'btn btn-success';}const delLast=document.getElementById('del-last-run'),creLast=document.getElementById('cre-last-run');if(delLast&&data?.last_scheduled_delete){const d=new Date(data.last_scheduled_delete);delLast.textContent=`上次执行: ${d.toLocaleString('zh-CN')}`;}if(creLast&&data?.last_scheduled_create){const d=new Date(data.last_scheduled_create);creLast.textContent=`上次执行: ${d.toLocaleString('zh-CN')}`;}setToggle('tog-sched-master',S.config.scheduled_tasks_enabled);}
+async function toggleMon(){if(S.monitorRunning){await api('/monitor/stop','POST');toast('监控已停止','wrn');}else{await api('/monitor/start','POST');toast('监控已启动');}S.monitorRunning=!S.monitorRunning;updateMonUI({});}
+async function checkNow(){await api('/monitor/check-now','POST');toast('已触发立即检查，稍后刷新查看结果','wrn');setTimeout(()=>refreshServers(true),4000);}
+function startPoll(){if(S.pollTimer)clearInterval(S.pollTimer);S.pollTimer=setInterval(()=>{const active=document.querySelector('.page.active')?.id;if(active==='page-dashboard'||active==='page-servers')refreshServers();if(active==='page-logs')loadLogs();checkMonitor();},60000);}
+async function toggleScheduler(){const{data}=await api('/monitor/status');const running=data.scheduler_running;if(running){await api('/config','POST',{scheduled_tasks_enabled:false});S.config.scheduled_tasks_enabled=false;toast('定时调度器已停止','wrn');}else{await api('/config','POST',{scheduled_tasks_enabled:true});S.config.scheduled_tasks_enabled=true;toast('定时调度器已启动');}await loadConfig();await checkMonitor();}
+async function toggleScheduleMaster(){S.config.scheduled_tasks_enabled=!S.config.scheduled_tasks_enabled;setToggle('tog-sched-master',S.config.scheduled_tasks_enabled);await api('/config','POST',{scheduled_tasks_enabled:S.config.scheduled_tasks_enabled});await checkMonitor();toast(S.config.scheduled_tasks_enabled?'调度器已启动':'调度器已停止',S.config.scheduled_tasks_enabled?'ok':'wrn');}
+async function refreshServers(force=false){const{data}=await api('/servers'+(force?'?refresh=1':''));S.servers=data.servers||[];renderDash();renderSvList();if(data.last_check){const d=new Date(data.last_check);document.getElementById('last-check-txt').textContent=`上次: ${d.toLocaleTimeString('zh-CN')}`;}}
+function renderDash(){const sv=S.servers,thr=S.config.traffic_threshold||0.8;document.getElementById('s-total').textContent=sv.length;document.getElementById('s-run').textContent=sv.filter(s=>s.status==='running').length;const high=sv.filter(s=>s.usage_ratio>=thr);document.getElementById('s-high').textContent=high.length;document.getElementById('s-thr-lbl').textContent=`超过 ${Math.round(thr*100)}% 阈值`;const tot=sv.reduce((a,s)=>a+s.outgoing_traffic,0);document.getElementById('s-traffic').innerHTML=`${(tot/1024**3).toFixed(1)}<small>GB</small>`;const el=document.getElementById('dash-servers');if(!sv.length){el.innerHTML=emptyState('🖥','暂无服务器','当前项目下没有运行中的实例');return;}el.innerHTML=`<div class="sv-grid">${sv.map(s=>svCard(s,thr)).join('')}</div>`;}
+function renderSvList(){const el=document.getElementById('sv-list'),sv=S.servers,thr=S.config.traffic_threshold||0.8;if(!sv.length){el.innerHTML=emptyState('🖥','暂无服务器','点击右上角创建');return;}el.innerHTML=`<div class="sv-grid">${sv.map(s=>svCard(s,thr)).join('')}</div>`;}
+function svCard(s,thr){const r=s.usage_ratio||0,pct=s.usage_percent||0;const outG=(s.outgoing_traffic/1024**3).toFixed(2),incG=(s.included_traffic/1024**3).toFixed(2);let tc='tf-0';if(r>=0.9)tc='tf-3';else if(r>=thr)tc='tf-2';else if(r>=0.5)tc='tf-1';const pctColor=tc==='tf-3'?'var(--rose)':tc==='tf-2'?'var(--orange)':tc==='tf-1'?'var(--amber)':'var(--emerald)';const bw=Math.min(100,Math.round(r*100));const bc=s.status==='running'?'b-run':s.status==='off'?'b-off':'b-init';const ti=s.server_type_info||{};const alertBar=r>=0.9?'<div class="sv-alert"></div>':r>=thr?'<div class="sv-alert sv-alert-amber"></div>':'';return `<div class="sv-card">${alertBar}<div class="sv-card-top"><div><div class="sv-name">${s.name}</div><div class="sv-meta"><span class="badge ${bc}">● ${s.status}</span><span class="badge b-type">${s.server_type}${ti.cores?` · ${ti.cores}c/${ti.memory}G`:''}</span></div></div></div><div class="sv-ip"><span class="sv-ip-val">${s.ipv4||'—'}</span>${s.ipv4?`<button class="sv-ip-copy" onclick="copy('${s.ipv4}')" title="复制">📋</button>`:''}</div><div><div class="tbar-hd"><span class="tbar-lbl">出站流量</span><span class="tbar-pct" style="color:${pctColor}">${pct}%</span></div><div class="tbar-track"><div class="tbar-fill ${tc}" style="width:${bw}%"></div></div><div class="tbar-detail">${outG} GB / ${incG} GB included</div></div><div class="sv-foot"><div class="sv-tags"><span class="tag">${s.location||''}</span>${s.image?.type==='snapshot'?`<span class="tag tag-snap">snap:${s.image.id}</span>`:`<span class="tag">${s.image?.name||'?'}</span>`}${ti.traffic?`<span class="tag">${ti.traffic}</span>`:''}</div><div class="sv-acts"><button class="btn btn-success btn-sm" onclick="rebuildSv(${s.id},'${s.name}')">🔄</button><button class="btn btn-danger btn-sm" onclick="confirmDel(${s.id},'${s.name}')">🗑</button></div></div></div>`;}
+async function confirmDel(id,name){openModal('确认删除',`<p style="color:var(--ink2);margin-bottom:18px;">确定删除 <strong style="color:var(--rose)">${name}</strong>？此操作不可撤销。</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="delSv(${id})">确认删除</button></div>`);}
+async function delSv(id){closeModal();const{ok}=await api(`/servers/${id}`,'DELETE');if(ok){toast('服务器已删除');await refreshServers(true);}else toast('删除失败','err');}
+async function rebuildSv(id,name){openModal('确认重建',`<p style="color:var(--ink2);margin-bottom:6px;">重建 <strong>${name}</strong></p><p style="font-size:12px;color:var(--ink3);margin-bottom:18px;">将按优先级创建新服务器，成功后删除旧服务器，并自动同步 Vertex IP</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="doRebuild(${id})">确认重建</button></div>`);}
+async function doRebuild(id){closeModal();toast('重建中，请稍候…','wrn');const{ok,data}=await api(`/servers/rebuild/${id}`,'POST');if(ok){toast(`重建成功！新IP: ${data.new_server?.ip}`);await refreshServers(true);}else toast(data.error||'重建失败','err');}
+function openCreateModal(){const types=S.serverTypes,cfg=S.config;openModal('创建服务器',`<div class="fg"><label class="fl">服务器名称</label><input class="inp" id="cr-name" placeholder="my-server-01"></div><div class="fg"><label class="fl">服务器型号</label><select class="inp" id="cr-type">${types.map(t=>`<option value="${t}">${t}${S.catalog[t]?` — ${S.catalog[t].cores}c/${S.catalog[t].memory}G`:''}</option>`).join('')}${Object.keys(S.catalog).filter(k=>!types.includes(k)).map(k=>`<option value="${k}">${k} — ${S.catalog[k].cores}c/${S.catalog[k].memory}G</option>`).join('')}</select></div><div class="fg"><label class="fl">镜像/快照 ID</label><input class="inp" id="cr-img" placeholder="${cfg.initial_snapshot_id||'快照ID'}"><div class="fh">留空使用默认快照 ID</div></div><div class="fg"><label class="fl">地区</label><select class="inp" id="cr-loc"><option value="nbg1">nbg1 — 德国纽伦堡</option><option value="fsn1">fsn1 — 法尔肯施泰因</option><option value="hel1">hel1 — 芬兰赫尔辛基</option><option value="ash">ash — 美国弗吉尼亚</option><option value="hil">hil — 美国希尔斯伯勒</option><option value="sin">sin — 新加坡</option></select></div><div class="info-box" style="margin-bottom:14px;font-size:11px;">✅ 创建完成后将自动同步 Vertex 下载器 IP</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="doCreate()">✓ 创建</button></div>`);}
+async function doCreate(){const name=document.getElementById('cr-name').value.trim(),server_type=document.getElementById('cr-type').value;const imgVal=document.getElementById('cr-img').value.trim()||S.config.initial_snapshot_id;const location=document.getElementById('cr-loc').value;if(!name){toast('请输入服务器名称','err');return;}if(!imgVal){toast('请输入镜像ID','err');return;}closeModal();toast('正在创建…','wrn');const{ok,data}=await api('/servers/create','POST',{name,server_type,image_id:parseInt(imgVal),location});if(ok){toast(`创建成功！IP: ${data.server.ip}`);await refreshServers(true);}else toast(data.error||'创建失败','err');}
+async function loadImages(){const type=document.getElementById('img-type')?.value||'snapshot';document.getElementById('snap-list').innerHTML='<div class="loading"><div class="spin"></div></div>';const{data}=await api(`/images?type=${type}`);const imgs=data.images||[];if(!imgs.length){document.getElementById('snap-list').innerHTML=emptyState('💾','暂无镜像');return;}const fmtDate=d=>d?new Date(d).toLocaleDateString('zh-CN'):'—';const fmtGB=n=>n?`${n.toFixed(1)}GB`:'—';document.getElementById('snap-list').innerHTML=`<div class="snap-grid">${imgs.map(img=>`<div class="snap-card"><div style="display:flex;align-items:center;justify-content:space-between;"><div class="snap-name">${img.name||img.description||'未命名'}</div><span class="snap-id">${img.id}</span></div><div class="snap-meta"><span>💿 ${fmtGB(img.disk_size)}</span><span>📦 ${fmtGB(img.image_size)}</span><span>🕐 ${fmtDate(img.created)}</span></div>${img.os_flavor?`<div style="font-size:11px;color:var(--ink3);">${img.os_flavor} ${img.os_version||''}</div>`:''}<div class="snap-acts"><button class="btn btn-xs btn-base" onclick="copy('${img.id}')">📋 复制ID</button><button class="btn btn-xs btn-primary" onclick="useSnap(${img.id})">＋ 用此创建</button></div></div>`).join('')}</div>`;}
+function useSnap(id){nav('servers');setTimeout(()=>{openCreateModal();setTimeout(()=>{document.getElementById('cr-img').value=id;},60);},100);}
+async function loadVertexCfg(){const cfg=S.config;document.getElementById('vcfg-url').value=cfg.vertex_api_url||'';document.getElementById('vcfg-kw').value=cfg.vertex_downloader_keyword||'Hetzner';setToggle('tog-vertex-sync',cfg.vertex_sync_enabled);const status=document.getElementById('vertex-conn-status');if(cfg.vertex_api_url){status.innerHTML=`<span style="font-size:12px;color:var(--ink3);">地址: <span style="color:var(--blue);font-family:var(--mono);">${cfg.vertex_api_url}</span></span>${cfg.vertex_cookies_set?'<span style="font-size:11px;background:#d1fae5;color:#047857;padding:2px 8px;border-radius:6px;margin-left:8px;">Cookie 已设置</span>':'<span style="font-size:11px;background:#fee2e2;color:var(--rose);padding:2px 8px;border-radius:6px;margin-left:8px;">Cookie 未设置</span>'}`; }}
+async function saveVertexCfg(){const url=document.getElementById('vcfg-url').value.trim(),kw=document.getElementById('vcfg-kw').value.trim(),cookies=document.getElementById('vcfg-cookies').value.trim();const body={vertex_api_url:url,vertex_downloader_keyword:kw};if(cookies)body.vertex_cookies=cookies;const{ok}=await api('/config','POST',body);if(ok){toast('Vertex 配置已保存');await loadConfig();await loadVertexCfg();}else toast('保存失败','err');}
+async function vertexTest(){const{ok,data}=await api('/vertex/test','POST');const status=document.getElementById('vertex-conn-status');if(ok&&data.success){toast(data.message);status.innerHTML=`<span style="font-size:12px;color:var(--emerald);">✅ ${data.message}</span>`;}else{toast(data.message||data.error||'连接失败','err');status.innerHTML=`<span style="font-size:12px;color:var(--rose);">❌ ${data.message||data.error}</span>`;}}
+async function loadVertex(){document.getElementById('dl-list').innerHTML='<div class="loading"><div class="spin"></div></div>';const{ok,data}=await api('/vertex/downloaders');if(!ok){document.getElementById('dl-list').innerHTML=`<div style="color:var(--rose);font-size:13px;padding:20px;">${data.error||'加载失败，请检查 Vertex 配置'}</div>`;document.getElementById('dl-count-txt').textContent='';return;}const dls=data.downloaders||[];document.getElementById('dl-count-txt').textContent=`共 ${dls.length} 个，${dls.filter(d=>d._is_hetzner).length} 个 Hetzner`;if(!dls.length){document.getElementById('dl-list').innerHTML=emptyState('🔌','暂无下载器');return;}document.getElementById('dl-list').innerHTML=`<div class="dl-list-wrap">${dls.map(dl=>`<div class="dl-card ${dl._is_hetzner?'h-card':''}"><div class="dl-indicator ${dl.status==='active'?'live':''}"></div><div class="dl-info"><div class="dl-alias">${dl.alias||'未命名'} ${dl._is_hetzner?'<span class="dl-h-badge">Hetzner</span>':''}</div><div class="dl-url">${dl.clientUrl||dl.url||'—'}</div></div>${dl._current_ip?`<div class="dl-ip-tag">${dl._current_ip}</div>`:''}</div>`).join('')}</div>`;}
+async function vertexSyncNow(){toast('正在从 Hetzner API 拉取最新 IP 并同步…','wrn');const{ok,data}=await api('/vertex/sync','POST',{});if(ok){toast(`同步完成: 更新 ${data.result.updated} / 保持 ${data.result.kept} / 失败 ${data.result.failed}`);document.getElementById('vertex-last-sync').textContent=`上次同步: ${new Date().toLocaleTimeString('zh-CN')} — 更新 ${data.result.updated} 个，使用IP: ${(data.ips_used||[]).join(', ')}`;await loadVertex();}else toast(data.error||'同步失败','err');}
+function renderCatalog(){const filter=document.getElementById('cat-filter')?.value||'';const catalog=S.catalog;const types=Object.entries(catalog).filter(([k,v])=>!filter||v.series===filter);document.getElementById('cat-current-types').textContent=(S.serverTypes||[]).join(' → ');if(!types.length){document.getElementById('catalog-grid').innerHTML=emptyState('📋','暂无数据');return;}document.getElementById('catalog-grid').innerHTML=types.map(([name,info])=>{const sel=(S.serverTypes||[]).includes(name);const sc=info.series==='CX'?'background:rgba(67,97,238,.12);color:var(--blue)':info.series==='CPX'?'background:rgba(14,165,233,.12);color:var(--cyan)':'background:rgba(124,58,237,.12);color:var(--violet)';return `<div class="ct-card ${sel?'sel':''}" onclick="toggleCatalogType('${name}')"><div class="ct-name"><span class="ct-series" style="${sc}">${info.series}</span>${name}${info.arch==='arm64'?` <span style="font-size:9px;color:var(--violet);background:rgba(124,58,237,.1);padding:1px 6px;border-radius:4px;">ARM64</span>`:''}</div><div class="ct-specs"><span class="ct-spec">🔲 ${info.cores} vCPU</span><span class="ct-spec">💾 ${info.memory}GB</span><span class="ct-spec">💿 ${info.disk}GB</span></div><div class="ct-traffic">🌐 ${info.traffic}</div>${sel?'<div class="ct-check">✓ 已在优先级列表</div>':'<div style="font-size:10px;color:var(--ink4);margin-top:6px;">点击添加</div>'}</div>`;}).join('');}
+function toggleCatalogType(name){if(!S.serverTypes)S.serverTypes=[];if(!S.serverTypes.includes(name)){S.serverTypes.push(name);toast(`已添加 ${name}`);}else{S.serverTypes=S.serverTypes.filter(t=>t!==name);toast(`已移除 ${name}`,'wrn');}renderCatalog();renderTypeChips();api('/config','POST',{server_types:S.serverTypes});}
+function loadScheduleCfg(){const c=S.config,g=id=>document.getElementById(id);g('cfg-del-h').value=c.schedule_delete_hour??23;g('cfg-del-m').value=String(c.schedule_delete_minute??0).padStart(2,'0');g('cfg-cre-h').value=c.schedule_create_hour??8;g('cfg-cre-m').value=String(c.schedule_create_minute??0).padStart(2,'0');g('cfg-cre-count').value=c.schedule_create_count??3;g('cfg-cre-prefix').value=c.schedule_server_name_prefix??'hetzner-auto';const tzEl=g('cfg-tz');if(tzEl){const saved=c.schedule_timezone||'Asia/Shanghai';if(![...tzEl.options].some(o=>o.value===saved))tzEl.add(new Option(saved,saved));tzEl.value=saved;}setToggle('tog-sched-master',c.scheduled_tasks_enabled);setToggle('tog-del',c.schedule_delete_enabled);setToggle('tog-cre',c.schedule_create_enabled);const srvEl=document.getElementById('srv-localtime');if(srvEl)srvEl.textContent=new Date().toLocaleString('zh-CN');updateTimeline();}
+function pad2(n){return String(parseInt(n)||0).padStart(2,'0');}
+function calcGapText(dh,dm,ch,cm){let gap=(parseInt(ch)*60+parseInt(cm))-(parseInt(dh)*60+parseInt(dm));if(gap<=0)gap+=24*60;const h=Math.floor(gap/60),m=gap%60;return h>0?(m>0?`间隔 ${h}h${m}m`:`间隔 ${h}h`):`间隔 ${m}m`;}
+function updateTimeline(){const dh=parseInt(document.getElementById('cfg-del-h')?.value??S.config.schedule_delete_hour??23);const dm=parseInt(document.getElementById('cfg-del-m')?.value??S.config.schedule_delete_minute??0);const ch=parseInt(document.getElementById('cfg-cre-h')?.value??S.config.schedule_create_hour??8);const cm=parseInt(document.getElementById('cfg-cre-m')?.value??S.config.schedule_create_minute??0);const tz=document.getElementById('cfg-tz')?.value||S.config.schedule_timezone||'Asia/Shanghai';const delEnabled=S.config.schedule_delete_enabled,creEnabled=S.config.schedule_create_enabled;const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};set('tl-delete-time',`${pad2(dh)}:${pad2(dm)}`);set('tl-create-time',`${pad2(ch)}:${pad2(cm)}`);set('tl-gap-text',calcGapText(dh,dm,ch,cm));const delEl=document.getElementById('tl-delete-status'),creEl=document.getElementById('tl-create-status');if(delEl){delEl.textContent=delEnabled?'✓ 已启用':'未启用';delEl.style.background=delEnabled?'#fee2e2':'#f3f4f6';delEl.style.color=delEnabled?'var(--rose)':'var(--ink4)';}if(creEl){creEl.textContent=creEnabled?'✓ 已启用':'未启用';creEl.style.background=creEnabled?'#d1fae5':'#f3f4f6';creEl.style.color=creEnabled?'#047857':'var(--ink4)';}const shortTz=tz.split('/').pop().replace(/_/g,' ');set('del-tz-label',shortTz);set('cre-tz-label',shortTz);set('del-time-preview',delEnabled?`每天 ${pad2(dh)}:${pad2(dm)}（${tz}）执行删除`:'未启用，不会自动删除');set('cre-time-preview',creEnabled?`每天 ${pad2(ch)}:${pad2(cm)}（${tz}）执行创建`:'未启用，不会自动创建');}
+async function saveSchedule(){const body={scheduled_tasks_enabled:S.config.scheduled_tasks_enabled,schedule_timezone:document.getElementById('cfg-tz')?.value||'Asia/Shanghai',schedule_delete_enabled:S.config.schedule_delete_enabled,schedule_delete_hour:parseInt(document.getElementById('cfg-del-h').value),schedule_delete_minute:parseInt(document.getElementById('cfg-del-m').value),schedule_create_enabled:S.config.schedule_create_enabled,schedule_create_hour:parseInt(document.getElementById('cfg-cre-h').value),schedule_create_minute:parseInt(document.getElementById('cfg-cre-m').value),schedule_create_count:parseInt(document.getElementById('cfg-cre-count').value),schedule_server_name_prefix:document.getElementById('cfg-cre-prefix').value.trim()||'hetzner-auto'};if(isNaN(body.schedule_delete_hour)||body.schedule_delete_hour<0||body.schedule_delete_hour>23||isNaN(body.schedule_delete_minute)||body.schedule_delete_minute<0||body.schedule_delete_minute>59){toast('删除时间填写有误','err');return;}if(isNaN(body.schedule_create_hour)||body.schedule_create_hour<0||body.schedule_create_hour>23||isNaN(body.schedule_create_minute)||body.schedule_create_minute<0||body.schedule_create_minute>59){toast('创建时间填写有误','err');return;}const{ok}=await api('/config','POST',body);if(ok){await loadConfig();updateTimeline();await checkMonitor();toast(`✅ 已保存：${pad2(body.schedule_delete_hour)}:${pad2(body.schedule_delete_minute)} 删除 / ${pad2(body.schedule_create_hour)}:${pad2(body.schedule_create_minute)} 创建（${body.schedule_timezone}）`);}else toast('保存失败','err');}
+async function triggerDeleteNow(){openModal('确认立即执行',`<p style="color:var(--ink2);margin-bottom:8px;">⚠️ 这将<strong style="color:var(--rose)">立即删除账户下所有服务器</strong>，确认继续？</p><p style="font-size:12px;color:var(--ink3);margin-bottom:18px;">此操作不可撤销，建议仅在测试时使用。</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="doTriggerDelete()">确认删除所有</button></div>`);}
+async function doTriggerDelete(){closeModal();toast('正在删除所有服务器…','wrn');const{ok,data}=await api('/scheduler/trigger-delete','POST');if(ok){toast(data.message);setTimeout(()=>refreshServers(true),3000);}else toast(data.error||'触发失败','err');}
+async function triggerCreateNow(){const count=document.getElementById('cfg-cre-count')?.value||S.config.schedule_create_count||3;const prefix=document.getElementById('cfg-cre-prefix')?.value||S.config.schedule_server_name_prefix||'hetzner-auto';openModal('确认立即执行',`<p style="color:var(--ink2);margin-bottom:8px;">将立即创建 <strong style="color:var(--emerald)">${count} 台</strong>服务器（前缀: ${prefix}）</p><p style="font-size:12px;color:var(--ink3);margin-bottom:18px;">使用当前保存的快照ID和型号优先级配置。</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-success" onclick="doTriggerCreate()">确认创建</button></div>`);}
+async function doTriggerCreate(){closeModal();toast('正在批量创建服务器…','wrn');const{ok,data}=await api('/scheduler/trigger-create','POST');if(ok){toast(data.message);setTimeout(()=>refreshServers(true),5000);}else toast(data.error||'触发失败','err');}
+function loadMonitorCfg(){const c=S.config;document.getElementById('cfg-interval').value=c.check_interval||1200;document.getElementById('cfg-thr').value=c.traffic_threshold||0.8;document.getElementById('cfg-sh').value=c.work_start_hour||8;document.getElementById('cfg-eh').value=c.work_end_hour||23;document.getElementById('cfg-em').value=c.work_end_minute||30;const loc=document.getElementById('cfg-loc');if(loc)loc.value=c.default_location||'nbg1';setToggle('tog-rebuild',c.auto_rebuild_enabled);setToggle('tog-tw',c.enable_time_window);renderTypeChips(c.server_types||['cx43']);}
+function renderTypeChips(types){if(types)S.serverTypes=types;document.getElementById('types-chips').innerHTML=(S.serverTypes||[]).map((t,i)=>`<div class="chip">${t}${S.catalog[t]?` <small style="color:var(--ink3)">${S.catalog[t].cores}c</small>`:''}<span class="chip-x" onclick="removeType(${i})">×</span></div>`).join('')+`<div class="chip" style="border-style:dashed;cursor:pointer;background:transparent;color:var(--ink3);" onclick="nav('catalog')">+ 查看型号</div>`;}
+function addType(){const v=document.getElementById('type-inp').value.trim().toLowerCase();if(v&&!S.serverTypes)S.serverTypes=[];if(v){S.serverTypes.push(v);renderTypeChips();document.getElementById('type-inp').value='';}}
+function removeType(i){S.serverTypes.splice(i,1);renderTypeChips();}
+async function saveMonitorCfg(){const body={check_interval:parseInt(document.getElementById('cfg-interval').value),traffic_threshold:parseFloat(document.getElementById('cfg-thr').value),work_start_hour:parseInt(document.getElementById('cfg-sh').value),work_end_hour:parseInt(document.getElementById('cfg-eh').value),work_end_minute:parseInt(document.getElementById('cfg-em').value),default_location:document.getElementById('cfg-loc').value,auto_rebuild_enabled:S.config.auto_rebuild_enabled,enable_time_window:S.config.enable_time_window,server_types:S.serverTypes};const{ok}=await api('/config','POST',body);if(ok){await loadConfig();startPoll();toast('监控配置已保存');}else toast('保存失败','err');}
+async function loadLogs(){const{data}=await api('/monitor/logs?limit=200');const logs=data.logs||[];const box=document.getElementById('log-box');if(!logs.length){box.innerHTML='<div style="color:var(--ink4);text-align:center;padding:40px;">暂无日志</div>';return;}box.innerHTML=logs.map(l=>`<div class="log-row"><span class="log-t">${l.time}</span><span class="log-m ${l.level}">${escHtml(l.msg)}</span></div>`).join('');}
+function clearLogs(){document.getElementById('log-box').innerHTML='<div style="color:var(--ink4);text-align:center;padding:40px;">已清空</div>';}
+async function loadSettings(){const{data}=await api('/config');S.config=data;document.getElementById('s-snap').value=data.initial_snapshot_id||'';document.getElementById('s-ssh').value=(data.ssh_keys||[]).join(', ');if(data.hetzner_api_key_masked)document.getElementById('s-apikey-hint').textContent=`当前: ${data.hetzner_api_key_masked}`;if(data.telegram_bot_token_masked)document.getElementById('s-tgt-hint').textContent=`当前: ${data.telegram_bot_token_masked}`;}
+async function saveApiCfg(){const keyVal=document.getElementById('s-apikey').value.trim(),snap=document.getElementById('s-snap').value.trim(),sshRaw=document.getElementById('s-ssh').value.trim();const ssh=sshRaw?sshRaw.split(',').map(s=>s.trim()).filter(Boolean).map(Number):[];const body={initial_snapshot_id:snap,ssh_keys:ssh};if(keyVal)body.hetzner_api_key=keyVal;const{ok}=await api('/config','POST',body);if(ok){toast('API 配置已保存');await loadConfig();await loadSettings();}else toast('保存失败','err');}
+async function testApi(){const{ok,data}=await api('/servers?refresh=1');if(ok)toast(`连接成功，找到 ${data.count} 台服务器`);else toast('连接失败，请检查 API Key','err');}
+async function saveTgCfg(){const t=document.getElementById('s-tgt').value.trim(),c=document.getElementById('s-tgc').value.trim();const body={};if(t)body.telegram_bot_token=t;if(c)body.telegram_chat_id=c;const{ok}=await api('/config','POST',body);if(ok)toast('Telegram 配置已保存');else toast('保存失败','err');}
+async function testTg(){const{ok}=await api('/telegram/test','POST');if(ok)toast('测试消息已发送！');else toast('发送失败','err');}
+async function savePwd(){const pwd=document.getElementById('s-pwd').value;if(!pwd){toast('请输入新密码','wrn');return;}const{ok}=await api('/config','POST',{web_password:pwd});if(ok){toast('密码已更新，请重新登录');setTimeout(doLogout,1600);}else toast('更新失败','err');}
+function setToggle(id,val){const el=document.getElementById(id);if(el)el.className='tog-sw'+(val?' on':'');}
+function toggleField(field,toggleId){S.config[field]=!S.config[field];setToggle(toggleId,S.config[field]);}
+function toggleSchedField(field,toggleId,callback){S.config[field]=!S.config[field];setToggle(toggleId,S.config[field]);if(callback)callback();}
+function openModal(title,body){document.getElementById('modal-title').textContent=title;document.getElementById('modal-body').innerHTML=body;document.getElementById('modal-bg').classList.add('open');}
+function closeModal(e){if(e&&e.target!==document.getElementById('modal-bg'))return;document.getElementById('modal-bg').classList.remove('open');}
+function copy(text){navigator.clipboard?.writeText(text).then(()=>toast(`已复制: ${text}`)).catch(()=>toast('复制失败','err'));}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function emptyState(icon,title,sub=''){return `<div class="empty"><div class="empty-icon">${icon}</div><h3>${title}</h3>${sub?`<p>${sub}</p>`:''}</div>`;}
+checkAuth().then(()=>{if(document.getElementById('app').classList.contains('show'))initApp();});
+setInterval(()=>{if(document.getElementById('page-logs').classList.contains('active'))loadLogs();checkMonitor();},30000);
+</script>
+</body>
+</html>

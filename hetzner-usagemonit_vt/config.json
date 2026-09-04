@@ -1,0 +1,42 @@
+{
+  "hetzner_api_key": "hVMShcFQtUsvLXKCHCeinR1bJUfkNZ6AXONQ5gF2xykBUPWAOi0WF7EjDaVvLZyA",
+  "traffic_threshold": 0.8,
+  "check_interval": 1200,
+  "max_servers": 3,
+  "initial_snapshot_id": "385546912",
+  "ssh_keys": [
+    103101821
+  ],
+  "server_types": [
+    "cpx42",
+    "cpx32"
+  ],
+  "enable_time_window": false,
+  "work_start_hour": 8,
+  "work_end_hour": 23,
+  "work_end_minute": 30,
+  "telegram_bot_token": "8340088080:AAEbX22i7ZHli4ZcXnw_09FfSUlEUHrdG_4",
+  "telegram_chat_id": "8104838294",
+  "web_password": "akashi178",
+  "auto_rebuild_enabled": true,
+  "rebuild_schedule_enabled": false,
+  "default_location": "nbg1",
+  "vertex_api_url": "http://23.82.99.203:3077",
+  "vertex_cookies": "connect.sid=s%3Ae9b939878f6e437dabaad759b0d685ef.2CV6DKXnklIMP2zGSun9V%2BrkKkSo3EbIuJoeyR%2FTOkU",
+  "vertex_username": "admin",
+  "vertex_password": "288f2488-8729-4179-b7a9-5abb25ca3503",
+  "vertex_cookie_check_interval": 300,
+  "vertex_sync_enabled": true,
+  "vertex_downloader_keyword": "Hetzner",
+  "vertex_password_md5": "",
+  "scheduled_tasks_enabled": false,
+  "schedule_timezone": "Asia/Shanghai",
+  "schedule_delete_enabled": false,
+  "schedule_delete_hour": 23,
+  "schedule_delete_minute": 0,
+  "schedule_create_enabled": false,
+  "schedule_create_hour": 13,
+  "schedule_create_minute": 50,
+  "schedule_create_count": 3,
+  "schedule_server_name_prefix": "hetzner-auto"
+}

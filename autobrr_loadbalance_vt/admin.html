@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vertex Hub · 管理面板</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f4f6fb;
+      --bg-soft:   #eef1f8;
+      --surface:   #ffffff;
+      --surface-2: #f8fafc;
+      --border:    #e5e9f2;
+      --border-2:  #d4dae6;
+      --text:      #16233d;
+      --text-2:    #5b6b84;
+      --text-3:    #93a1b8;
+      --accent:    #4f7cf6;
+      --accent-2:  #6f9dff;
+      --violet:    #7c5cf0;
+      --green:     #16a34a;
+      --green-bg:  #e8f7ee;
+      --red:       #dc2626;
+      --red-bg:    #fdecec;
+      --amber:     #b45309;
+      --amber-bg:  #fdf3e3;
+      --radius:    18px;
+      --radius-sm: 10px;
+      --font:      'Inter', system-ui, sans-serif;
+      --mono:      'JetBrains Mono', monospace;
+      --shadow:    0 10px 34px rgba(23, 37, 84, 0.08);
+      --shadow-sm: 0 2px 10px rgba(23, 37, 84, 0.06);
+      --gradient:  linear-gradient(135deg, #4f7cf6 0%, #7c5cf0 100%);
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      background-image:
+        radial-gradient(900px 380px at 15% -10%, rgba(79,124,246,0.10), transparent 60%),
+        radial-gradient(900px 420px at 90% 0%, rgba(124,92,240,0.09), transparent 60%);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Login ── */
+    #login-overlay {
+      position: fixed; inset: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1rem;
+    }
+    .login-card {
+      width: 100%; max-width: 420px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 2.75rem 2.5rem;
+      box-shadow: var(--shadow);
+      text-align: center;
+      animation: fadeUp .45s ease both;
+    }
+    .login-logo {
+      width: 62px; height: 62px;
+      background: var(--gradient);
+      border-radius: 18px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 28px;
+      color: #fff;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 12px 28px rgba(79,124,246,0.35);
+    }
+    .login-title { font-size: 1.55rem; font-weight: 800; letter-spacing: -.01em; }
+    .login-sub   { color: var(--text-2); font-size: .88rem; margin-top: .35rem; margin-bottom: 2rem; }
+    .field-label {
+      display: block; text-align: left;
+      font-size: .72rem; font-weight: 600;
+      color: var(--text-3); text-transform: uppercase; letter-spacing: .07em;
+      margin-bottom: .45rem;
+    }
+    .field-input {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: .7rem 1rem;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: .9rem;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+      margin-bottom: 1.05rem;
+    }
+    .field-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(79,124,246,0.14);
+    }
+    .btn-primary {
+      width: 100%;
+      background: var(--gradient);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: .8rem 1.5rem;
+      font-family: var(--font);
+      font-size: .92rem; font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(79,124,246,0.28);
+      transition: opacity .2s, transform .1s, box-shadow .2s;
+    }
+    .btn-primary:hover  { opacity: .92; box-shadow: 0 10px 24px rgba(79,124,246,0.34); }
+    .btn-primary:active { transform: scale(.98); }
+    #login-error {
+      color: var(--red);
+      font-size: .82rem;
+      min-height: 1.4rem;
+      margin-top: .8rem;
+    }
+
+    /* ── App shell ── */
+    #app { display: none; height: 100vh; flex-direction: column; }
+    #app.visible { display: flex; }
+
+    /* ── Header ── */
+    .header {
+      height: 60px; min-height: 60px;
+      background: rgba(255,255,255,0.82);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2rem;
+      gap: 1rem;
+      position: relative; z-index: 10;
+    }
+    .header-brand { display: flex; align-items: center; gap: .8rem; }
+    .header-icon {
+      width: 34px; height: 34px;
+      background: var(--gradient);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; color: #fff;
+      box-shadow: 0 6px 16px rgba(79,124,246,0.3);
+    }
+    .header-name { font-weight: 700; font-size: .98rem; letter-spacing: -.01em; }
+    .header-mode {
+      font-size: .72rem; font-weight: 600; color: var(--violet);
+      background: rgba(124,92,240,0.10);
+      border: 1px solid rgba(124,92,240,0.18);
+      border-radius: 999px;
+      padding: .28rem .8rem;
+      letter-spacing: .03em;
+    }
+    .header-actions { display: flex; gap: .5rem; align-items: center; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius-sm);
+      padding: .42rem .9rem;
+      color: var(--text-2);
+      font-family: var(--font);
+      font-size: .82rem; font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .btn-ghost:hover { background: var(--surface); color: var(--text); border-color: var(--text-3); }
+    .dot-live {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(22,163,74,0.15);
+      animation: pulse 2.2s ease infinite;
+    }
+
+    /* ── Layout ── */
+    .body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 216px; min-width: 216px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 1.25rem 1rem;
+      gap: .3rem;
+    }
+    .nav-label {
+      font-size: .66rem; font-weight: 700;
+      color: var(--text-3); text-transform: uppercase; letter-spacing: .12em;
+      padding: .3rem .65rem;
+      margin-top: .4rem; margin-bottom: .3rem;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: .7rem;
+      padding: .6rem .8rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: .88rem; font-weight: 500;
+      color: var(--text-2);
+      border: none; background: transparent;
+      text-align: left; width: 100%;
+      transition: background .15s, color .15s;
+    }
+    .nav-item .icon { font-size: 1.05rem; }
+    .nav-item:hover { background: var(--bg); color: var(--text); }
+    .nav-item.active {
+      background: rgba(79,124,246,0.08);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── Main ── */
+    .main {
+      flex: 1; overflow-y: auto;
+      padding: 2.25rem;
+      background: transparent;
+    }
+    .main::-webkit-scrollbar { width: 6px; }
+    .main::-webkit-scrollbar-track { background: transparent; }
+    .main::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 10px; }
+    .container {
+      max-width: 1024px;
+      margin: 0 auto;
+    }
+
+    /* ── Panel ── */
+    .panel { display: none; animation: fadeUp .3s ease both; }
+    .panel.active { display: block; }
+
+    .page-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap;
+    }
+    .page-title { font-size: 1.35rem; font-weight: 800; letter-spacing: -.015em; }
+    .page-sub   { color: var(--text-2); font-size: .84rem; margin-top: .25rem; }
+
+    /* ── Stat cards ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.75rem;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.4rem;
+      box-shadow: var(--shadow-sm);
+      transition: transform .2s, box-shadow .2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+    .stat-label {
+      font-size: .7rem; font-weight: 600;
+      color: var(--text-3); text-transform: uppercase; letter-spacing: .07em;
+    }
+    .stat-value { font-size: 1.7rem; font-weight: 800; margin-top: .55rem; line-height: 1; letter-spacing: -.01em; }
+    .stat-value.green  { color: var(--green); }
+    .stat-value.red    { color: var(--red); }
+    .stat-value.accent { background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    /* ── Server cards ── */
+    .server-list { display: flex; flex-direction: column; gap: .8rem; }
+    .server-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.15rem 1.35rem;
+      display: flex; align-items: flex-start; gap: 1rem;
+      box-shadow: var(--shadow-sm);
+      transition: border-color .2s, box-shadow .2s, opacity .25s, transform .25s;
+    }
+    .server-card:hover { border-color: var(--border-2); box-shadow: var(--shadow); }
+    .server-card.removing {
+      opacity: 0; transform: translateX(12px);
+      pointer-events: none;
+    }
+    .server-dot {
+      width: 11px; height: 11px; border-radius: 50%;
+      margin-top: .4rem; flex-shrink: 0;
+    }
+    .server-dot.online  { background: var(--green); box-shadow: 0 0 0 4px rgba(22,163,74,0.16); }
+    .server-dot.offline { background: var(--red); box-shadow: 0 0 0 4px rgba(220,38,38,0.14); }
+    .server-dot.unknown { background: var(--text-3); }
+
+    .server-body { flex: 1; min-width: 0; }
+    .server-name {
+      font-weight: 700; font-size: .92rem;
+      display: flex; align-items: center; gap: .55rem; flex-wrap: wrap;
+    }
+    .server-url {
+      font-family: var(--mono);
+      font-size: .74rem;
+      color: var(--text-3);
+      margin-top: .3rem;
+      word-break: break-all;
+    }
+    .server-meta {
+      display: flex; flex-wrap: wrap; gap: 1.4rem;
+      margin-top: .9rem;
+    }
+    .server-metric {
+      display: flex; align-items: center; gap: .4rem;
+      font-size: .78rem; color: var(--text-2);
+    }
+    .server-metric .k { color: var(--text-3); }
+    .server-metric .v { color: var(--text); font-weight: 700; }
+
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: .18rem .55rem;
+      border-radius: 999px;
+      font-size: .7rem; font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .badge.online  { background: var(--green-bg); color: var(--green); }
+    .badge.offline { background: var(--red-bg);   color: var(--red); }
+    .badge.unknown { background: var(--bg-soft);  color: var(--text-3); }
+
+    /* ── Buttons ── */
+    .btn-danger {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      padding: .32rem .7rem;
+      color: var(--text-3);
+      font-family: var(--font);
+      font-size: .8rem; font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
+      flex-shrink: 0;
+    }
+    .btn-danger:hover { background: var(--red-bg); color: var(--red); border-color: rgba(220,38,38,.25); }
+
+    .btn-accent {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: .6rem 1.3rem;
+      font-family: var(--font);
+      font-size: .85rem; font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(79,124,246,0.26);
+      transition: background .15s, transform .1s, box-shadow .15s;
+      white-space: nowrap;
+    }
+    .btn-accent:hover  { background: var(--accent-2); box-shadow: 0 8px 20px rgba(79,124,246,0.32); }
+    .btn-accent:active { transform: scale(.97); }
+
+    .btn-green {
+      background: var(--gradient);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: .6rem 1.3rem;
+      font-family: var(--font);
+      font-size: .85rem; font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(79,124,246,0.3);
+      transition: opacity .15s, transform .1s;
+      display: inline-flex; align-items: center; gap: .5rem;
+      white-space: nowrap;
+    }
+    .btn-green:hover  { opacity: .9; }
+    .btn-green:active { transform: scale(.97); }
+
+    /* ── Form card ── */
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.6rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .form-title {
+      font-size: .74rem; font-weight: 700;
+      color: var(--text-3); text-transform: uppercase; letter-spacing: .09em;
+      margin-bottom: 1.1rem;
+    }
+    .form-row { display: flex; gap: .8rem; align-items: flex-end; flex-wrap: wrap; }
+    .form-group { flex: 1; min-width: 0; }
+    .field-hint {
+      color: var(--text-2); font-size: .8rem;
+      margin-bottom: 1.05rem;
+      font-family: var(--mono);
+    }
+
+    /* ── Env editor ── */
+    .env-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .env-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .7rem 1.1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    .env-toolbar-label { font-family: var(--mono); font-size: .78rem; color: var(--text-3); }
+    .env-toolbar-actions { display: flex; gap: .5rem; }
+    #env-content {
+      width: 100%; min-height: 380px;
+      background: #0f172a;
+      color: #a5d6ff;
+      font-family: var(--mono);
+      font-size: .82rem;
+      line-height: 1.7;
+      padding: 1.25rem;
+      border: none; outline: none; resize: vertical;
+    }
+    .env-warn {
+      display: flex; gap: .65rem; align-items: flex-start;
+      background: var(--amber-bg);
+      border: 1px solid rgba(180,83,9,.22);
+      border-radius: var(--radius-sm);
+      padding: .8rem 1.05rem;
+      font-size: .82rem;
+      color: var(--amber);
+      margin-bottom: 1rem;
+    }
+
+    /* ── Log viewer ── */
+    #log-output {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: .78rem;
+      line-height: 1.65;
+      padding: 1.15rem;
+      max-height: 540px;
+      overflow-y: auto;
+      box-shadow: var(--shadow-sm);
+    }
+    #log-output::-webkit-scrollbar { width: 4px; }
+    #log-output::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    .log-line { padding: .08rem 0; white-space: pre-wrap; word-break: break-all; }
+    .log-line.error  { color: #fca5a5; }
+    .log-line.warn   { color: #fcd34d; }
+    .log-line.ok     { color: #86efac; }
+    .log-line.normal { color: #94a3b8; }
+
+    /* ── Log controls ── */
+    .log-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+    .field-select {
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius-sm);
+      padding: .42rem .8rem;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: .82rem;
+      outline: none;
+      cursor: pointer;
+    }
+    .field-select:focus { border-color: var(--accent); }
+
+    /* ── Probe spinner ── */
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      display: inline-block;
+      animation: spin .7s linear infinite;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      background: var(--surface);
+      border: 1.5px dashed var(--border-2);
+      border-radius: var(--radius);
+      padding: 3rem;
+      text-align: center;
+      color: var(--text-3);
+      font-size: .9rem;
+    }
+
+    /* ── Toast ── */
+    #toast-container {
+      position: fixed; right: 1.25rem; bottom: 1.25rem;
+      display: flex; flex-direction: column-reverse; gap: .6rem;
+      z-index: 9999;
+    }
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow);
+      padding: .75rem 1.1rem;
+      font-size: .85rem;
+      min-width: 200px; max-width: 340px;
+      border-left: 3px solid var(--accent);
+      color: var(--text);
+      animation: slideIn .25s ease both;
+    }
+    .toast.error  { border-left-color: var(--red); }
+    .toast.warn   { border-left-color: var(--amber); }
+    .toast.ok     { border-left-color: var(--green); }
+    .toast.fade-out { animation: fadeOut .25s ease forwards; }
+
+    /* ── Divider ── */
+    .section-divider {
+      height: 1px; background: var(--border);
+      margin: 1.5rem 0;
+    }
+
+    /* ── Keyframes ── */
+    @keyframes fadeUp  { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateX(8px); } }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+    @keyframes spin    { to { transform: rotate(360deg); } }
+    @keyframes pulse   {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .55; }
+    }
+
+    /* ── Mobile ── */
+    @media (max-width: 860px) {
+      .sidebar { display: none; }
+      .main { padding: 1.25rem; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .header { padding: 0 1.1rem; }
+      .header-mode { display: none; }
+      .mobile-nav { display: flex !important; }
+    }
+    .mobile-nav {
+      display: none;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      justify-content: space-around;
+    }
+    .mobile-nav-item {
+      flex: 1; padding: .7rem .25rem;
+      display: flex; flex-direction: column; align-items: center; gap: .2rem;
+      font-size: .62rem; font-weight: 600;
+      color: var(--text-3);
+      background: none; border: none;
+      cursor: pointer; transition: color .15s;
+    }
+    .mobile-nav-item .m-icon { font-size: 1.25rem; }
+    .mobile-nav-item.active { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<!-- ══ Login ══ -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-logo">⚡</div>
+    <p class="login-title">Vertex Hub</p>
+    <p class="login-sub">输入管理密钥以进入控制台</p>
+
+    <label class="field-label" for="base-url-input">服务地址</label>
+    <input id="base-url-input" class="field-input" type="text" placeholder="http://localhost:5032" />
+
+    <label class="field-label" for="secret-input">管理密钥</label>
+    <input id="secret-input" class="field-input" type="password" placeholder="ADMIN_SECRET" autocomplete="off" />
+
+    <button class="btn-primary" onclick="doLogin()">进入控制台</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- ══ App ══ -->
+<div id="app">
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-icon">⚡</div>
+      <span class="header-name">Vertex Hub</span>
+      <span class="header-mode" id="hdr-mode">Vertex Proxy</span>
+    </div>
+    <div class="header-actions">
+      <div class="dot-live" title="服务运行中"></div>
+      <button class="btn-ghost" onclick="doReload()">热重载</button>
+      <button class="btn-ghost" onclick="logout()">退出</button>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="nav-label">导航</div>
+      <button class="nav-item active" data-tab="overview" onclick="switchTab('overview')">
+        <span class="icon">📊</span> 系统概览
+      </button>
+      <button class="nav-item" data-tab="servers" onclick="switchTab('servers')">
+        <span class="icon">🖥</span> 服务器管理
+      </button>
+      <button class="nav-item" data-tab="env" onclick="switchTab('env')">
+        <span class="icon">⚙️</span> 配置文件
+      </button>
+      <button class="nav-item" data-tab="logs" onclick="switchTab('logs')">
+        <span class="icon">📋</span> 运行日志
+      </button>
+    </nav>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="container">
+
+        <!-- ── Overview ── -->
+        <section id="panel-overview" class="panel active">
+          <div class="page-header">
+            <div>
+              <p class="page-title">系统概览</p>
+              <p class="page-sub">实时运行状态与服务器健康度</p>
+            </div>
+            <button class="btn-green" id="probe-btn" onclick="probeServers()">
+              <span id="probe-icon">🔍</span> 探测服务器
+            </button>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">服务器总数</div>
+              <div class="stat-value" id="stat-total">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">在线</div>
+              <div class="stat-value green" id="stat-online">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">下线</div>
+              <div class="stat-value red" id="stat-offline">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">分发策略</div>
+              <div class="stat-value accent" id="stat-strategy" style="font-size:1.15rem;margin-top:.75rem;">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">运行时间</div>
+              <div class="stat-value" id="stat-uptime" style="font-size:1.08rem;margin-top:.75rem;">—</div>
+            </div>
+          </div>
+
+          <div class="server-list" id="overview-server-list"></div>
+        </section>
+
+        <!-- ── Servers ── -->
+        <section id="panel-servers" class="panel">
+          <div class="page-header">
+            <div>
+              <p class="page-title">服务器管理</p>
+              <p class="page-sub" id="servers-subtitle">添加或删除 Vertex 推送目标</p>
+            </div>
+          </div>
+
+          <!-- VT form -->
+          <div id="form-vt" class="form-card">
+            <div class="form-title">Vertex Proxy 模式 · 添加代理</div>
+            <p class="field-hint" id="vt-url-preview-hint"></p>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="field-label" for="new-proxy-id">Proxy ID</label>
+                <input id="new-proxy-id" class="field-input" style="margin-bottom:0" type="text" placeholder="d85456e1" oninput="updateVtPreview()" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">拼接后地址（只读 · 已脱敏）</label>
+                <input id="vt-url-preview" class="field-input" style="margin-bottom:0;opacity:.65" readonly />
+              </div>
+              <button class="btn-accent" onclick="addServer()">添加</button>
+            </div>
+          </div>
+
+          <div class="section-divider"></div>
+          <div class="server-list" id="server-manage-list"></div>
+        </section>
+
+        <!-- ── Env ── -->
+        <section id="panel-env" class="panel">
+          <div class="page-header">
+            <div>
+              <p class="page-title">环境配置</p>
+              <p class="page-sub">.env 文件 · 敏感字段已脱敏 · 保存后自动热重载</p>
+            </div>
+          </div>
+          <div class="env-warn">
+            ⚠️ 修改配置后立即生效。Cookie / 密码 / 密钥等敏感字段以掩码显示，若未改动会自动保留原值。
+          </div>
+          <div class="env-card">
+            <div class="env-toolbar">
+              <span class="env-toolbar-label">📄 .env</span>
+              <div class="env-toolbar-actions">
+                <button class="btn-ghost" onclick="loadEnv()">刷新</button>
+                <button class="btn-accent" onclick="saveEnv()">保存并热重载</button>
+              </div>
+            </div>
+            <textarea id="env-content" spellcheck="false"></textarea>
+          </div>
+        </section>
+
+        <!-- ── Logs ── -->
+        <section id="panel-logs" class="panel">
+          <div class="page-header">
+            <div>
+              <p class="page-title">运行日志</p>
+              <p class="page-sub">torrent_webhook.log · 已脱敏</p>
+            </div>
+            <div class="log-controls">
+              <select id="log-lines" class="field-select">
+                <option value="100">最近 100 行</option>
+                <option value="200" selected>最近 200 行</option>
+                <option value="500">最近 500 行</option>
+              </select>
+              <button class="btn-ghost" onclick="loadLogs()">刷新</button>
+              <button class="btn-ghost" id="auto-btn" onclick="toggleAutoRefresh()">自动刷新</button>
+            </div>
+          </div>
+          <div id="log-output"></div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Mobile nav -->
+  <nav class="mobile-nav">
+    <button class="mobile-nav-item active" data-tab="overview" onclick="switchTab('overview')"><span class="m-icon">📊</span>概览</button>
+    <button class="mobile-nav-item" data-tab="servers" onclick="switchTab('servers')"><span class="m-icon">🖥</span>服务器</button>
+    <button class="mobile-nav-item" data-tab="env" onclick="switchTab('env')"><span class="m-icon">⚙️</span>配置</button>
+    <button class="mobile-nav-item" data-tab="logs" onclick="switchTab('logs')"><span class="m-icon">📋</span>日志</button>
+  </nav>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+  // ─── State ───────────────────────────────────────────
+  let SECRET = '';
+  let BASE_URL = '';
+  let vtBaseUrl = '';
+  let autoRefreshTimer = null;
+  let autoRefreshOn = false;
+
+  // ─── Init ─────────────────────────────────────────────
+  document.getElementById('base-url-input').value = window.location.origin;
+
+  document.getElementById('secret-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  // ─── Auth ─────────────────────────────────────────────
+  function doLogin() {
+    SECRET   = document.getElementById('secret-input').value.trim();
+    BASE_URL = (document.getElementById('base-url-input').value.trim() || window.location.origin).replace(/\/$/, '');
+    document.getElementById('login-error').textContent = '';
+
+    apiFetch('/admin/status')
+      .then(data => {
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('app').classList.add('visible');
+        applyStatus(data);
+        loadOverview();
+        setActiveTab('overview');
+      })
+      .catch(() => {
+        document.getElementById('login-error').textContent = '密钥错误或服务不可达';
+      });
+  }
+
+  function logout() {
+    SECRET = BASE_URL = '';
+    stopAutoRefresh();
+    document.getElementById('login-overlay').style.display = 'flex';
+    document.getElementById('app').classList.remove('visible');
+  }
+
+  // ─── API ──────────────────────────────────────────────
+  function apiFetch(path, opts = {}) {
+    const sep = path.includes('?') ? '&' : '?';
+    const url = BASE_URL + path + sep + 'secret=' + encodeURIComponent(SECRET);
+    return fetch(url, {
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': SECRET },
+      ...opts,
+    }).then(r => {
+      if (r.status === 401) throw new Error('Unauthorized');
+      return r.json();
+    });
+  }
+
+  // ─── Nav ──────────────────────────────────────────────
+  function switchTab(name) {
+    setActiveTab(name);
+    if (name === 'overview') loadOverview();
+    if (name === 'servers')  loadServerList();
+    if (name === 'env')      loadEnv();
+    if (name === 'logs')     loadLogs();
+    if (name !== 'logs' && autoRefreshOn) stopAutoRefresh();
+  }
+
+  function setActiveTab(name) {
+    document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(el =>
+      el.classList.toggle('active', el.dataset.tab === name));
+    document.querySelectorAll('.panel').forEach(el =>
+      el.classList.toggle('active', el.id === 'panel-' + name));
+  }
+
+  // ─── Status ───────────────────────────────────────────
+  function applyStatus(data) {
+    vtBaseUrl = data.vt_url || '';
+    document.getElementById('stat-strategy').textContent = data.strategy || '—';
+    document.getElementById('stat-uptime').textContent   = data.uptime   || '—';
+  }
+
+  // ─── Overview ─────────────────────────────────────────
+  function loadOverview() {
+    apiFetch('/admin/status').then(applyStatus);
+    apiFetch('/admin/servers').then(data => {
+      const servers = data.servers || [];
+      const online  = servers.filter(s => s.available === true).length;
+      const offline = servers.filter(s => s.available === false).length;
+      document.getElementById('stat-total').textContent   = servers.length;
+      document.getElementById('stat-online').textContent  = online;
+      document.getElementById('stat-offline').textContent = offline;
+      renderOverviewCards(servers);
+    });
+  }
+
+  function renderOverviewCards(servers) {
+    const wrap = document.getElementById('overview-server-list');
+    if (!servers.length) {
+      wrap.innerHTML = '<div class="empty-state">暂无服务器，请前往「服务器管理」添加。</div>';
+      return;
+    }
+    wrap.innerHTML = servers.map(s => serverCardHTML(s, false)).join('');
+  }
+
+  // ─── Probe ────────────────────────────────────────────
+  function probeServers() {
+    const btn  = document.getElementById('probe-btn');
+    const icon = document.getElementById('probe-icon');
+    btn.disabled = true;
+    icon.innerHTML = '<span class="spinner"></span>';
+
+    apiFetch('/admin/probe', { method: 'POST' })
+      .then(data => {
+        btn.disabled = false;
+        icon.textContent = '🔍';
+        showToast(`探测完成：${data.online} 在线 / ${data.offline} 下线`, 'ok');
+        document.getElementById('stat-total').textContent   = data.total;
+        document.getElementById('stat-online').textContent  = data.online;
+        document.getElementById('stat-offline').textContent = data.offline;
+        renderOverviewCards(data.servers || []);
+      })
+      .catch(() => {
+        btn.disabled = false;
+        icon.textContent = '🔍';
+        showToast('探测失败', 'error');
+      });
+  }
+
+  // ─── Server card HTML ─────────────────────────────────
+  function serverCardHTML(s, showDelete) {
+    const dotClass = s.available === true ? 'online' : s.available === false ? 'offline' : 'unknown';
+    const badge    = s.available === true
+      ? '<span class="badge online">在线</span>'
+      : s.available === false
+        ? '<span class="badge offline">下线</span>'
+        : '<span class="badge unknown">未探测</span>';
+
+    const upload = s.upload_speed    != null ? (s.upload_speed / 1048576).toFixed(2) + ' MB/s' : '—';
+    const count  = s.torrent_count   != null ? s.torrent_count + ' 个' : '—';
+    const space  = s.free_space      != null ? (s.free_space / 1073741824).toFixed(1) + ' GB'  : '—';
+
+    const nameHTML = esc(s.proxy_id || s.url);
+    const subHTML  = s.url ? `<div class="server-url">${esc(s.url)}</div>` : '';
+
+    const deleteKey = s.proxy_id || s.url;
+    const deleteBtn = showDelete
+      ? `<button class="btn-danger" onclick="removeServer(${JSON.stringify(deleteKey)}, this)">删除</button>`
+      : '';
+
+    return `
+      <div class="server-card" data-id="${esc(deleteKey)}">
+        <span class="server-dot ${dotClass}"></span>
+        <div class="server-body">
+          <div class="server-name">${nameHTML} ${badge}</div>
+          ${subHTML}
+          <div class="server-meta">
+            <div class="server-metric"><span class="k">⬆ 上传</span><span class="v">${upload}</span></div>
+            <div class="server-metric"><span class="k">📦 种子</span><span class="v">${count}</span></div>
+            <div class="server-metric"><span class="k">💾 空间</span><span class="v">${space}</span></div>
+          </div>
+        </div>
+        ${deleteBtn}
+      </div>`;
+  }
+
+  // ─── Servers panel ────────────────────────────────────
+  function loadServerList() {
+    apiFetch('/admin/servers').then(data => {
+      const servers = data.servers || [];
+      document.getElementById('vt-url-preview-hint').textContent =
+        `URL 规则：${vtBaseUrl || '<VTURL>'}/proxy/client/<Proxy ID>`;
+
+      const wrap = document.getElementById('server-manage-list');
+      if (!servers.length) {
+        wrap.innerHTML = '<div class="empty-state">暂无服务器，请在上方添加。</div>';
+        return;
+      }
+      wrap.innerHTML = servers.map(s => serverCardHTML(s, true)).join('');
+    });
+  }
+
+  function updateVtPreview() {
+    const pid  = document.getElementById('new-proxy-id').value.trim();
+    const base = vtBaseUrl || '(VTURL)';
+    document.getElementById('vt-url-preview').value =
+      pid ? `${base.replace(/\/$/, '')}/proxy/client/${pid}` : '';
+  }
+
+  function addServer() {
+    const pid = document.getElementById('new-proxy-id').value.trim();
+    if (!pid) return showToast('请填写 Proxy ID', 'error');
+
+    apiFetch('/admin/servers', { method: 'POST', body: JSON.stringify({ identifier: pid }) })
+      .then(data => {
+        if (data.status === 'added') {
+          showToast(`✓ 已添加代理 ${pid}`, 'ok');
+          document.getElementById('new-proxy-id').value    = '';
+          document.getElementById('vt-url-preview').value  = '';
+          loadServerList();
+        } else {
+          showToast('该 Proxy ID 已存在', 'warn');
+        }
+      })
+      .catch(() => showToast('添加失败', 'error'));
+  }
+
+  // ─── Remove server — optimistic UI ────────────────────
+  function removeServer(identifier, btn) {
+    if (!confirm(`确认删除？\n${identifier}`)) return;
+
+    const card = btn.closest('.server-card');
+    if (card) {
+      card.style.transition = 'opacity .22s ease, transform .22s ease, max-height .3s ease, margin .3s ease, padding .3s ease';
+      card.style.opacity    = '0';
+      card.style.transform  = 'translateX(14px)';
+      card.style.maxHeight  = card.scrollHeight + 'px';
+      setTimeout(() => {
+        card.style.maxHeight = '0';
+        card.style.padding   = '0';
+        card.style.margin    = '0';
+        card.style.overflow  = 'hidden';
+      }, 220);
+      setTimeout(() => card.remove(), 520);
+    }
+
+    apiFetch('/admin/servers', {
+      method: 'DELETE',
+      body: JSON.stringify({ identifier }),
+    })
+      .then(data => {
+        if (data.status === 'removed') {
+          showToast(`✓ 已删除 ${identifier}`, 'ok');
+          loadStatCounts();
+        } else {
+          showToast('未找到该服务器', 'warn');
+          loadServerList();
+        }
+      })
+      .catch(() => {
+        showToast('删除失败，正在恢复列表', 'error');
+        loadServerList();
+      });
+  }
+
+  function loadStatCounts() {
+    apiFetch('/admin/servers').then(data => {
+      const servers = data.servers || [];
+      document.getElementById('stat-total').textContent   = servers.length;
+      document.getElementById('stat-online').textContent  = servers.filter(s => s.available === true).length;
+      document.getElementById('stat-offline').textContent = servers.filter(s => s.available === false).length;
+    }).catch(() => {});
+  }
+
+  // ─── Env ──────────────────────────────────────────────
+  function loadEnv() {
+    apiFetch('/admin/env')
+      .then(data => { document.getElementById('env-content').value = data.content || ''; })
+      .catch(() => showToast('读取配置失败', 'error'));
+  }
+
+  function saveEnv() {
+    const content = document.getElementById('env-content').value;
+    apiFetch('/admin/env', { method: 'POST', body: JSON.stringify({ content }) })
+      .then(() => {
+        showToast('✓ 配置已保存并热重载', 'ok');
+        loadOverview();
+      })
+      .catch(() => showToast('保存失败', 'error'));
+  }
+
+  // ─── Reload ───────────────────────────────────────────
+  function doReload() {
+    apiFetch('/admin/reload', { method: 'POST' })
+      .then(data => {
+        showToast(`✓ 热重载完成，${data.servers} 台服务器`, 'ok');
+        loadOverview();
+      })
+      .catch(() => showToast('热重载失败', 'error'));
+  }
+
+  // ─── Logs ─────────────────────────────────────────────
+  function loadLogs() {
+    const n = document.getElementById('log-lines').value;
+    apiFetch(`/admin/logs?lines=${n}`)
+      .then(data => {
+        const out   = document.getElementById('log-output');
+        const lines = data.lines || [];
+        out.innerHTML = lines.map(line => {
+          const l = line.trimEnd();
+          let cls = 'normal';
+          if (/ERROR|✗|失败|异常|放弃/.test(l))       cls = 'error';
+          else if (/WARN|下线|超时|跳过/.test(l))      cls = 'warn';
+          else if (/✓|成功|在线|完成|热重载/.test(l)) cls = 'ok';
+          return `<div class="log-line ${cls}">${esc(l)}</div>`;
+        }).join('');
+        out.scrollTop = out.scrollHeight;
+      })
+      .catch(() => showToast('获取日志失败', 'error'));
+  }
+
+  function toggleAutoRefresh() {
+    autoRefreshOn = !autoRefreshOn;
+    const btn = document.getElementById('auto-btn');
+    if (autoRefreshOn) {
+      btn.style.background  = 'rgba(79,124,246,0.10)';
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.color       = 'var(--accent)';
+      btn.textContent       = '停止自动刷新';
+      loadLogs();
+      autoRefreshTimer = setInterval(loadLogs, 3000);
+    } else {
+      stopAutoRefresh();
+    }
+  }
+
+  function stopAutoRefresh() {
+    clearInterval(autoRefreshTimer);
+    autoRefreshOn = false;
+    const btn = document.getElementById('auto-btn');
+    if (btn) {
+      btn.style.background  = '';
+      btn.style.borderColor = '';
+      btn.style.color       = '';
+      btn.textContent       = '自动刷新';
+    }
+  }
+
+  // ─── Toast ────────────────────────────────────────────
+  function showToast(msg, type = 'ok') {
+    const c  = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className   = `toast ${type}`;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => {
+      el.classList.add('fade-out');
+      setTimeout(() => el.remove(), 260);
+    }, 3000);
+  }
+
+  // ─── Utils ────────────────────────────────────────────
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>

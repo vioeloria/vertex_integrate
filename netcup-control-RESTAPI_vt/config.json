@@ -1,0 +1,27 @@
+{
+  "webhook_path": "/webhook/secret-xxxxx",
+  "port": 56666,
+  "rest_accounts": [
+  {
+    "account_id": "245583",
+    "access_token": "",
+    "refresh_token": ""
+  }
+],
+  "vertex": {
+    "base_url": "http://23.82.99.203:3079",
+    "cookie": "",
+    "username": "admin",
+    "password": "",
+    "cookie_check_interval": 300
+  },
+  "telegram": {
+    "bot_token": "",
+    "chat_id": ""
+  },
+  "throttle_action": {
+    "strategy": "pause, delete, pause_resume任选一个",  
+    "delete_files": true,
+    "exclude_categories": ""
+  }
+}

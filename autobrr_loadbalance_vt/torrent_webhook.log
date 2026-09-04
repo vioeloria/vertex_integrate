@@ -1,0 +1,18 @@
+2026-09-04 15:35:07,030 - torrent_webhook - INFO - === Vertex 代理模式 ===
+2026-09-04 15:35:07,031 - torrent_webhook - ERROR - VT 模式启用但 VT_PROXIES 未配置
+2026-09-04 15:35:07,031 - torrent_webhook - INFO - [Background] 后台监控线程已启动
+2026-09-04 15:46:35,115 - __main__ - INFO - === Vertex 代理模式 ===
+2026-09-04 15:46:35,115 - __main__ - ERROR - VT 模式启用但 VT_PROXIES 未配置
+2026-09-04 15:46:35,115 - __main__ - INFO - [Background] 后台监控线程已启动
+2026-09-04 15:46:35,119 - __main__ - INFO - ============================================================
+2026-09-04 15:46:35,119 - __main__ - INFO - Webhook: /webhook/secure-xxxxxxxxxxxxxxxxxx  端口: 5032
+2026-09-04 15:46:35,119 - __main__ - INFO - 模式: Vertex 代理
+2026-09-04 15:46:35,119 - __main__ - INFO - 服务器数: 0
+2026-09-04 15:46:35,119 - __main__ - INFO - 管理面板: http://0.0.0.0:5032/admin
+2026-09-04 15:46:35,119 - __main__ - INFO - ============================================================
+2026-09-04 15:46:35,130 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5032
+ * Running on http://10.0.1.46:5032
+2026-09-04 15:46:35,130 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-09-04 15:46:37,120 - __main__ - WARNING - [Background] 无法获取有效 VT Cookie，跳过本轮状态探测
