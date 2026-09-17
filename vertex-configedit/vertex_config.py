@@ -1,628 +1,472 @@
 """
-vertex修改删种.py — Vertex 批量修改工具（集成 Cookie 自动刷新）
-=============================================================
-配置方式（三选一，优先级从高到低）：
+vertex_config.py — Vertex 批量修改工具（下载器 / RSS，单行指令 + CLI 一键执行）
+=============================================================================
+特性：
+  * 支持更多字段（下载器 / RSS 全部常用设置，含补种 reseed 关联字段）
+  * 单行指令格式：字段=值; 字段=值 （一次输入所有修改，只需确认一次）
+  * 支持命令行参数一键执行（--yes 跳过确认），方便定时任务 / 脚本调用
+  * Cookie 自动获取/刷新（依赖同目录 vertex_cookie.py）
 
-1. config.yaml（推荐）:
-   vertex:
-     url: ""
-     username: "admin"
-     password: "your_plaintext_password"   # 明文，会自动 MD5
-     # 或
-     # password_md5: "xxxxx32位哈希xxxxx"  # 直接给 MD5
+配置来源（优先级从高到低）：
+  1. 命令行参数  --url / --user / --pwd
+  2. 同目录 config.yaml 的 vertex 段（url / username / password 或 password_md5）
+  3. 环境变量  VTURL / VT_USERNAME / VT_PASSWORD
+  4. 交互式询问
 
-2. 环境变量:
-   export VTURL=""
-   export VT_USERNAME="admin"
-   export VT_PASSWORD="your_plaintext_password"
+示例：
+  # 交互式（启动时选择 1=下载器 2=RSS任务）
+  python vertex_config.py
 
-3. 回退：若以上均未配置，程序启动时交互式询问
+  # 一键修改某关键字下的下载器（不加 --yes 前会确认一次）
+  python vertex_config.py --url http://YOUR-VERTEX-IP:3077 --pwd 你的密码 \
+      --kw netcup leech=30 cron=3 up=50MiB rules=1,2,3 --yes
+
+  # 一键修改 RSS 任务
+  python vertex_config.py --rss --kw 动画 sort=upload maxdl=5 skip=on --yes
+
+  # 仅查看
+  python vertex_config.py --kw netcup --list
 """
 
 from __future__ import annotations
 
+import argparse
 import os
+import re
 import sys
-import logging
-from typing import Optional
+import warnings
+
+warnings.filterwarnings("ignore", message=".*urllib3.*")
+
+# Windows 控制台默认 GBK，无法输出 ✓/⚠ 等符号，强制 UTF-8
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 import requests
 
-# ── 尝试导入 vertex_cookie ──────────────────────────────────────────
-try:
-    from vertex_cookie import VertexCookieManager, from_env
-    _COOKIE_MODULE_AVAILABLE = True
-except ImportError:
-    _COOKIE_MODULE_AVAILABLE = False
-    print("⚠  未找到 vertex_cookie.py，将回退到 cookies.txt 模式")
+from vertex_cookie import get_cookie, force_refresh, DEFAULT_USERNAME
 
-# ── 尝试导入 PyYAML ────────────────────────────────────────────────
-try:
-    import yaml
-    _YAML_AVAILABLE = True
-except ImportError:
-    _YAML_AVAILABLE = False
-
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger(__name__)
+DEFAULT_USER = os.getenv("VT_USERNAME", DEFAULT_USERNAME)
 
 
-# ══════════════════════════════════════════════════════════════════
-# 配置加载
-# ══════════════════════════════════════════════════════════════════
-
-def _load_config_yaml(path: str = "config.yaml") -> dict:
-    """读取 config.yaml，不存在或解析失败则返回空 dict"""
-    if not _YAML_AVAILABLE:
+def load_yaml_config() -> dict:
+    """读取本文件同目录 config.yaml 的 vertex 段；未安装 yaml 或读取失败返回空 dict。"""
+    try:
+        import yaml
+    except ImportError:
         return {}
-    candidates = [path, os.path.join(os.path.dirname(os.path.abspath(__file__)), path)]
-    for p in candidates:
-        if os.path.exists(p):
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    data = yaml.safe_load(f) or {}
-                    return data.get("vertex", data)
-            except Exception as e:
-                print(f"⚠  读取 config.yaml 失败: {e}")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            return data.get("vertex", data)
+    except Exception:
+        pass
     return {}
 
 
-def build_cookie_manager() -> Optional["VertexCookieManager"]:
-    if not _COOKIE_MODULE_AVAILABLE:
+# ══════════════════════════════════════════════════════════════════
+# API 访问（Cookie 自动获取）
+# ══════════════════════════════════════════════════════════════════
+
+class Api:
+    def __init__(self, url: str, user: str, pwd: str, force_cookie: bool = False):
+        self.url = url.rstrip("/")
+        self.user = user
+        self.pwd = pwd
+        self.force_cookie = force_cookie
+
+    def _headers(self) -> dict:
+        if self.force_cookie:
+            cookie = force_refresh(self.url, self.user, self.pwd)
+        else:
+            cookie = get_cookie(self.url, self.user, self.pwd)
+        if not cookie:
+            sys.exit("❌ 无法获取有效 Cookie，请检查地址/账号/密码")
+        return {"Cookie": cookie, "Content-Type": "application/json"}
+
+    def get(self, path: str) -> dict:
+        r = requests.get(self.url + path, headers=self._headers(), timeout=15)
+        return r.json()
+
+    def post(self, path: str, payload: dict) -> dict:
+        r = requests.post(self.url + path, json=payload, headers=self._headers(), timeout=15)
+        return r.json()
+
+
+# ══════════════════════════════════════════════════════════════════
+# 字段解析
+# ══════════════════════════════════════════════════════════════════
+
+_UNITS = {
+    "g": "GiB", "gi": "GiB", "gib": "GiB", "gb": "GiB",
+    "m": "MiB", "mi": "MiB", "mib": "MiB", "mb": "MiB",
+    "k": "KiB", "ki": "KiB", "kib": "KiB", "kb": "KiB",
+    "t": "TiB", "ti": "TiB", "tib": "TiB", "tb": "TiB",
+}
+
+_SORTS = {
+    "up": "uploadSpeed", "upload": "uploadSpeed", "uploadspeed": "uploadSpeed",
+    "leech": "leechingCount", "leeching": "leechingCount", "leechingcount": "leechingCount",
+    "down": "downloadSpeed", "download": "downloadSpeed", "downloadspeed": "downloadSpeed",
+    "space": "freeSpaceOnDisk", "freespace": "freeSpaceOnDisk", "freespaceondisk": "freeSpaceOnDisk",
+}
+
+_CLEAR_VALUES = {"", "clear", "清空", "none", "0"}
+
+
+def parse_ids(v: str):
+    if v.strip().lower() in _CLEAR_VALUES:
+        return []
+    return [x.strip() for x in v.split(",") if x.strip()]
+
+
+def parse_int(v: str):
+    v = v.strip()
+    if not v or v.lower() in ("unlimited", "不限", "none", "0"):
+        return ""
+    if v.isdigit():
+        return str(int(v))
+    return None
+
+
+def parse_bool(v: str):
+    v = v.strip().lower()
+    if v in ("1", "on", "true", "yes", "y", "开", "启用"):
+        return True
+    if v in ("0", "off", "false", "no", "n", "关", "禁用"):
+        return False
+    return None
+
+
+def parse_cron(v: str, presets: dict):
+    v = v.strip()
+    if v in presets:
+        return presets[v]
+    return v or None
+
+
+def parse_size(v: str, default_unit: str = "MiB"):
+    v = v.strip()
+    if not v or v.lower() in ("unlimited", "不限", "none", "0"):
+        return ("", default_unit)
+    m = re.fullmatch(r"(\d+)\s*([A-Za-z]*)", v)
+    if not m:
         return None
+    unit = m.group(2).lower() or default_unit.lower()
+    return (m.group(1), _UNITS.get(unit, unit.capitalize() if len(unit) <= 2 else unit))
 
-    cfg = _load_config_yaml()
 
-    url      = cfg.get("url", "").rstrip("/")
-    username = cfg.get("username", "")
-    password = cfg.get("password", "")
-    pwd_md5  = cfg.get("password_md5", "")
+def parse_sort(v: str):
+    return _SORTS.get(v.strip().lower())
 
-    if url and username and (password or pwd_md5):
-        raw = password or pwd_md5
-        is_hashed = bool(pwd_md5 and not password)
-        print(f"✓ 使用 config.yaml 配置: {url} / {username}")
-        return VertexCookieManager(url, username, raw, password_is_hashed=is_hashed)
 
-    vcm = from_env()
-    if vcm:
-        print(f"✓ 使用环境变量配置: {vcm.login_url} / {vcm.username}")
-        return vcm
+def _size_fields(field: str, unit_field: str, v: str, default_unit: str):
+    r = parse_size(v, default_unit)
+    if r is None:
+        return None
+    val, unit = r
+    return {field: val, unit_field: unit}
 
-    print("\n未找到配置，请手动输入 Vertex 连接信息:")
-    url      = input("Vertex URL (例: http://23.82.99.203:3077): ").strip().rstrip("/")
-    username = input("用户名: ").strip()
-    password = input("密码（明文，将自动 MD5）: ").strip()
 
-    if not (url and username and password):
-        print("❌ 信息不完整，程序退出")
-        sys.exit(1)
+def _wrap(field: str, parser, v: str):
+    """解析值并打包为 {字段: 值}；解析失败返回 None（跳过该字段）"""
+    r = parser(v)
+    return None if r is None else {field: r}
 
-    return VertexCookieManager(url, username, password, password_is_hashed=False)
+
+DL_CRON = {"1": "*/15 * * * * *", "2": "*/30 * * * * *", "3": "0 */1 * * * *",
+           "4": "0 */5 * * * *", "5": "0 */10 * * * *"}
+RSS_CRON = {"1": "*/5 * * * * *", "2": "*/46 * * * * *", "3": "* * * * *",
+            "4": "*/5 * * * *", "5": "*/10 * * * *", "6": "*/30 * * * *"}
+
+
+# (alias -> (显示名, 解析函数->{字段:值}))
+DL_SPEC = {
+    "rules":  ("删种规则(deleteRules)",        lambda v: {"deleteRules": parse_ids(v)}),
+    "r":      ("删种规则(deleteRules)",        lambda v: {"deleteRules": parse_ids(v)}),
+    "reject": ("保护规则(rejectDeleteRules)",  lambda v: {"rejectDeleteRules": parse_ids(v)}),
+    "rej":    ("保护规则(rejectDeleteRules)",  lambda v: {"rejectDeleteRules": parse_ids(v)}),
+    "leech":  ("最大同时下载数(maxLeechNum)",  lambda v: _wrap("maxLeechNum", parse_int, v)),
+    "l":      ("最大同时下载数(maxLeechNum)",  lambda v: _wrap("maxLeechNum", parse_int, v)),
+    "ad":     ("自动删除(autoDelete)",         lambda v: _wrap("autoDelete", parse_bool, v)),
+    "cron":   ("删种周期(autoDeleteCron)",     lambda v: _wrap("autoDeleteCron", lambda x: parse_cron(x, DL_CRON), v)),
+    "c":      ("删种周期(autoDeleteCron)",     lambda v: _wrap("autoDeleteCron", lambda x: parse_cron(x, DL_CRON), v)),
+    "space":  ("最小剩余空间(minFreeSpace)",   lambda v: _size_fields("minFreeSpace", "minFreeSpaceUnit", v, "GiB")),
+    "sp":     ("最小剩余空间(minFreeSpace)",   lambda v: _size_fields("minFreeSpace", "minFreeSpaceUnit", v, "GiB")),
+    "up":     ("上传速度上限(maxUploadSpeed)", lambda v: _size_fields("maxUploadSpeed", "maxUploadSpeedUnit", v, "MiB")),
+    "down":   ("下载速度上限(maxDownloadSpeed)", lambda v: _size_fields("maxDownloadSpeed", "maxDownloadSpeedUnit", v, "MiB")),
+    "d":      ("下载速度上限(maxDownloadSpeed)", lambda v: _size_fields("maxDownloadSpeed", "maxDownloadSpeedUnit", v, "MiB")),
+    "en":     ("启用(enable)",                 lambda v: _wrap("enable", parse_bool, v)),
+    "monitor":("监控开关(monitor)",            lambda v: _wrap("monitor", parse_bool, v)),
+    "push":   ("推送通知(pushNotify)",         lambda v: _wrap("pushNotify", parse_bool, v)),
+    "reann":  ("自动重公告(autoReannounce)",   lambda v: _wrap("autoReannounce", parse_bool, v)),
+    "alarm":  ("空间告警(alarmSpace)",         lambda v: _size_fields("alarmSpace", "alarmSpaceUnit", v, "GiB")),
+}
+
+RSS_SPEC = {
+    "sort":   ("客户端排序(clientSortBy)",       lambda v: _wrap("clientSortBy", parse_sort, v)),
+    "maxdl":  ("单下载器任务上限(maxClientDownloadCount)", lambda v: _wrap("maxClientDownloadCount", parse_int, v)),
+    "maxupspeed": ("上传速度上限(maxClientUploadSpeed)", lambda v: _size_fields("maxClientUploadSpeed", "maxClientUploadSpeedUnit", v, "MiB")),
+    "us":     ("上传速度上限(maxClientUploadSpeed)", lambda v: _size_fields("maxClientUploadSpeed", "maxClientUploadSpeedUnit", v, "MiB")),
+    "maxdownspeed": ("下载速度上限(maxClientDownloadSpeed)", lambda v: _size_fields("maxClientDownloadSpeed", "maxClientDownloadSpeedUnit", v, "MiB")),
+    "ds":     ("下载速度上限(maxClientDownloadSpeed)", lambda v: _size_fields("maxClientDownloadSpeed", "maxClientDownloadSpeedUnit", v, "MiB")),
+    "skip":   ("跳过相同种子(skipSameTorrent)",  lambda v: _wrap("skipSameTorrent", parse_bool, v)),
+    "cron":   ("抓取间隔(cron)",                 lambda v: _wrap("cron", lambda x: parse_cron(x, RSS_CRON), v)),
+    "c":      ("抓取间隔(cron)",                 lambda v: _wrap("cron", lambda x: parse_cron(x, RSS_CRON), v)),
+    "arr":    ("下载器列表(clientArr)[覆盖]",    lambda v: {"clientArr": parse_ids(v)}),
+    "arr+":   ("下载器列表(clientArr)[追加]",    lambda v: {"clientArr": {"append": parse_ids(v)}}),
+    "arr-":   ("下载器列表(clientArr)[移除]",    lambda v: {"clientArr": {"remove": parse_ids(v)}}),
+    "path":   ("保存路径(savePath)",             lambda v: {"savePath": v.strip()} if v.strip() else None),
+    "reseed": ("自动补种(rssReseed)",            lambda v: _wrap("rssReseed", parse_bool, v)),
+    "sleep":  ("最大休眠(maxSleepTime)",         lambda v: _wrap("maxSleepTime", parse_int, v)),
+    "en":     ("启用(enable)",                   lambda v: _wrap("enable", parse_bool, v)),
+    "push":   ("推送通知(pushNotify)",           lambda v: _wrap("pushNotify", parse_bool, v)),
+}
+
+
+def parse_instructions(segments, spec: dict) -> dict:
+    """把指令文本(可含 ';')解析为 {字段: 值}"""
+    changes: dict = {}
+    for seg in segments:
+        for token in seg.split(";"):
+            token = token.strip()
+            if not token:
+                continue
+            if "=" not in token:
+                print(f"  ⚠ 忽略无法解析: {token}")
+                continue
+            key, _, val = token.partition("=")
+            key, val = key.strip().lower(), val.strip()
+            if key not in spec:
+                print(f"  ⚠ 未知字段: {key}")
+                continue
+            _, func = spec[key]
+            result = func(val)
+            if result is None:
+                print(f"  ⚠ 字段 {key} 的值无效: {val}")
+                continue
+            changes.update(result)
+    return changes
 
 
 # ══════════════════════════════════════════════════════════════════
-# Cookie 工具
+# 展示
 # ══════════════════════════════════════════════════════════════════
 
-class CookieProvider:
-    def __init__(self, manager: Optional["VertexCookieManager"] = None,
-                 cookies_file: str = "cookies.txt"):
-        self._manager      = manager
-        self._cookies_file = cookies_file
-        self._fallback_cookies: dict = {}
+def fetch_delete_rules(api: Api) -> dict:
+    data = api.get("/api/deleteRule/list")
+    if data and data.get("success"):
+        return {r["id"]: (r.get("alias") or r.get("name") or r["id"]) for r in data.get("data", [])}
+    return {}
 
-        if manager is None:
-            self._fallback_cookies = self._load_file_cookies()
 
-    def _load_file_cookies(self) -> dict:
-        cookies_dict = {}
-        try:
-            with open(self._cookies_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and "=" in line:
-                        k, v = line.split("=", 1)
-                        cookies_dict[k.strip()] = v.strip()
-        except FileNotFoundError:
-            print(f"❌ 找不到 Cookie 文件: {self._cookies_file}")
-            sys.exit(1)
-        return cookies_dict
-
-    def get_headers(self) -> dict:
-        if self._manager:
-            cookie_str = self._manager.get_valid_cookie()
-            return {"Cookie": cookie_str, "Content-Type": "application/json"}
-        return {"Content-Type": "application/json"}
-
-    def get_cookies(self) -> dict:
-        if self._manager:
-            return {}
-        return self._fallback_cookies
-
-    def apply(self, req_kwargs: dict) -> dict:
-        if self._manager:
-            headers = req_kwargs.setdefault("headers", {})
-            headers.update(self.get_headers())
+def show_items(api: Api, kind: str, items: list):
+    rule_names = fetch_delete_rules(api) if kind == "downloader" else {}
+    print(f"\n共 {len(items)} 个匹配项:\n")
+    for it in items:
+        alias = it.get("alias", it.get("id", "?"))
+        print(f"  ┌ {alias}  (ID: {it['id']})")
+        if kind == "downloader":
+            rules = it.get("deleteRules", [])
+            print(f"  │ 删除规则: {rules}"
+                  f"  | 规则名: {[rule_names.get(r, '?') for r in rules]}")
+            print(f"  │ 下载数: {it.get('maxLeechNum','')}  自动删除: {it.get('autoDelete')}"
+                  f"  删种周期: {it.get('autoDeleteCron','')}")
+            print(f"  │ 最小空间: {it.get('minFreeSpace','')} {it.get('minFreeSpaceUnit','GiB')}"
+                  f"  上传上限: {it.get('maxUploadSpeed','')} {it.get('maxUploadSpeedUnit','MiB')}"
+                  f"  下载上限: {it.get('maxDownloadSpeed','')} {it.get('maxDownloadSpeedUnit','MiB')}")
+            print(f"  │ 保护规则: {it.get('rejectDeleteRules', [])}  启用: {it.get('enable')}")
         else:
-            req_kwargs["cookies"] = self.get_cookies()
-        return req_kwargs
+            arr = it.get("clientArr", [])
+            print(f"  │ 排序: {it.get('clientSortBy','')}  单下载器上限: {it.get('maxClientDownloadCount','')}"
+                  f"  跳过相同: {it.get('skipSameTorrent')}")
+            print(f"  │ 抓取间隔: {it.get('cron','')}  启用: {it.get('enable')}"
+                  f"  补种: {it.get('rssReseed')}  保存路径: {it.get('savePath','')}")
+            print(f"  │ 下载器列表[{len(arr)}]: {','.join(arr) if arr else '（空）'}")
+        print(f"  └")
 
 
-# ══════════════════════════════════════════════════════════════════
-# VertexModifier  （下载器批量修改）
-# ══════════════════════════════════════════════════════════════════
+def print_help(kind: str):
+    print("\n可用字段（多个用 ';' 分隔，格式 字段=值）:")
+    if kind == "downloader":
+        print("  rules=ID列表      删种规则（逗号分隔，clear 清空）")
+        print("  reject=ID列表     保护/拒绝删种规则")
+        print("  leech=数字        最大同时下载数（0 或留空 = 不限制）")
+        print("  ad=on/off         自动删除开关")
+        print("  cron=1-5          删种周期（1=15秒 2=30秒 3=1分钟 4=5分钟 5=10分钟，或直接写cron表达式）")
+        print("  space=20GiB       最小剩余空间（0 = 关闭）")
+        print("  up=50MiB          上传速度上限（0 = 不限制）")
+        print("  down=100MiB       下载速度上限（0 = 不限制）")
+        print("  en=on/off         启用/禁用")
+        print("  monitor=on/off    监控开关")
+        print("  push=on/off       推送通知")
+        print("  reann=on/off      自动重公告")
+        print("  alarm=20GiB       空间告警")
+    else:
+        print("  sort=upload/leech/download/space   客户端排序")
+        print("  maxdl=数字        单下载器任务上限（0 = 不限制）")
+        print("  maxupspeed=50MiB  上传速度上限（0 = 不限制）")
+        print("  maxdownspeed=100MiB 下载速度上限")
+        print("  skip=on/off       跳过相同种子")
+        print("  cron=1-6          抓取间隔（1=5秒 2=46秒 3=1分钟 4=5分钟 5=10分钟 6=30分钟）")
+        print("  arr=ID列表        覆盖下载器列表（留空 = 清空）")
+        print("  arr+=ID列表       追加到现有列表（已开启补种时同步加入 reseedClients）")
+        print("  arr-=ID列表       从现有列表移除（同步从 reseedClients 移除）")
+        print("  path=保存路径     保存路径")
+        print("  reseed=on/off     自动补种（开启时自动补齐 reseedClients；无该键的版本不受影响）")
+        print("  sleep=数字        最大休眠（秒）")
+        print("  en=on/off         启用/禁用")
 
-class VertexModifier:
-    def __init__(self, cookie_provider: CookieProvider,
-                 base_url: str, filter_keyword: str = ""):
-        self.cp              = cookie_provider
-        self.base_url        = base_url.rstrip("/") + "/api/downloader"
-        self.delete_rule_url = base_url.rstrip("/") + "/api/deleteRule"
-        self.filter_keyword  = filter_keyword
 
-    def _get(self, url: str) -> Optional[dict]:
-        try:
-            kw = self.cp.apply({"timeout": 15})
-            r  = requests.get(url, **kw)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            print(f"请求失败 [{url}]: {e}")
-            return None
-
-    def _post(self, url: str, payload: dict) -> Optional[dict]:
-        try:
-            kw = self.cp.apply({"json": payload, "timeout": 15})
-            r  = requests.post(url, **kw)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            print(f"请求失败 [{url}]: {e}")
-            return None
-
-    def get_downloader_list(self) -> Optional[dict]:
-        return self._get(f"{self.base_url}/list")
-
-    def get_delete_rules(self) -> dict:
-        data = self._get(f"{self.delete_rule_url}/list")
-        if data and data.get("success"):
-            return {rule["id"]: rule.get("name", rule["id"]) for rule in data.get("data", [])}
-        return {}
-
-    def display_rules_summary(self, filtered_clients: list):
-        print("\n" + "=" * 60)
-        print("📋 当前删种规则汇总（可复制规则ID用于批量设置）")
-        print("=" * 60)
-
-        rule_name_map        = self.get_delete_rules()
-        all_rule_ids_ordered = []
-        seen_ids             = set()
-
-        for client in filtered_clients:
-            rules        = client.get("deleteRules", [])
-            client_alias = client.get("alias", client.get("id", "未知"))
-            print(f"\n  📦 {client_alias}")
-            if not rules:
-                print("     （无删种规则）")
-            else:
-                print(f"     规则数: {len(rules)} 条")
-                for rid in rules:
-                    name         = rule_name_map.get(rid, "")
-                    display_name = f"  ← {name}" if name else ""
-                    print(f"       • {rid}{display_name}")
-                    if rid not in seen_ids:
-                        seen_ids.add(rid)
-                        all_rule_ids_ordered.append(rid)
-
-        print("\n" + "-" * 60)
-        print("🔑 所有规则去重汇总（按首次出现顺序）:")
-        if all_rule_ids_ordered:
-            for rid in all_rule_ids_ordered:
-                name         = rule_name_map.get(rid, "")
-                display_name = f"  ← {name}" if name else ""
-                print(f"   • {rid}{display_name}")
-            print("\n📋 可直接复制的格式（用于批量设置删种规则）:")
-            print(f"   {','.join(all_rule_ids_ordered)}")
+def show_summary(kind: str, changes: dict):
+    print(f"\n即将修改{('RSS任务' if kind == 'rss' else '下载器')}:")
+    for field, value in changes.items():
+        if field == "clientArr" and isinstance(value, dict):
+            op = "追加" if "append" in value else "移除"
+            ids = value.get("append") or value.get("remove")
+            print(f"  - clientArr {op}: {ids}")
         else:
-            print("   （所有下载器均无删种规则）")
-        print("=" * 60)
-
-    def filter_clients(self, data: dict) -> list:
-        if not data or not data.get("success"):
-            return []
-        return [c for c in data.get("data", []) if self.filter_keyword in c.get("alias", "")]
-
-    def modify_client(self, client: dict, new_rules=None, max_leech_num=None,
-                      auto_delete_cron=None, min_free_space=None,
-                      min_free_space_unit=None, max_upload_speed=None,
-                      max_upload_speed_unit=None) -> Optional[dict]:
-        payload = client.copy()
-        if new_rules             is not None: payload["deleteRules"]       = new_rules
-        if max_leech_num         is not None: payload["maxLeechNum"]        = max_leech_num
-        if auto_delete_cron      is not None: payload["autoDeleteCron"]     = auto_delete_cron
-        if min_free_space        is not None: payload["minFreeSpace"]       = min_free_space
-        if min_free_space_unit   is not None: payload["minFreeSpaceUnit"]   = min_free_space_unit
-        if max_upload_speed      is not None: payload["maxUploadSpeed"]     = max_upload_speed
-        if max_upload_speed_unit is not None: payload["maxUploadSpeedUnit"] = max_upload_speed_unit
-        return self._post(f"{self.base_url}/modify", payload)
-
-    def run(self):
-        print("=" * 60)
-        print("Vertex Downloader 批量修改工具")
-        print("=" * 60)
-
-        print("\n[1/9] 正在获取下载器列表...")
-        data = self.get_downloader_list()
-        if not data:
-            print("❌ 获取列表失败")
-            return
-
-        if not self.filter_keyword:
-            print("\n[2/9] 请输入要筛选的alias关键字:")
-            print("示例: Netcup, Hetzner, 或其他关键字")
-            self.filter_keyword = input(">>> ").strip()
-            if not self.filter_keyword:
-                print("❌ 未输入关键字，操作取消")
-                return
-        else:
-            print(f"\n[2/9] 使用预设关键字: {self.filter_keyword}")
-
-        print(f"[3/9] 正在筛选包含'{self.filter_keyword}'的客户端...")
-        filtered_clients = self.filter_clients(data)
-        if not filtered_clients:
-            print(f"❌ 未找到包含'{self.filter_keyword}'的客户端")
-            return
-
-        print(f"✓ 找到 {len(filtered_clients)} 个匹配的客户端:")
-        for i, client in enumerate(filtered_clients, 1):
-            print(f"  {i}. {client['alias']} (ID: {client['id']})")
-            print(f"     当前规则数: {len(client.get('deleteRules', []))}")
-            print(f"     当前最大下载数: {client.get('maxLeechNum', '未设置')}")
-            print(f"     当前删种间隔: {client.get('autoDeleteCron', '未设置')}")
-            print(f"     当前最小剩余空间: {client.get('minFreeSpace', '未设置')} {client.get('minFreeSpaceUnit', 'GiB')}")
-            print(f"     当前上传速度上限: {client.get('maxUploadSpeed', '未设置')} {client.get('maxUploadSpeedUnit', 'MiB')}")
-
-        self.display_rules_summary(filtered_clients)
-
-        print("\n[4/9] 是否需要修改删种规则? (y/n)")
-        modify_rules = input(">>> ").strip().lower() == "y"
-        new_rules = None
-        if modify_rules:
-            print("\n请输入新的删种规则ID（用逗号分隔）:")
-            user_input = input(">>> ").strip()
-            if user_input:
-                new_rules = [r.strip() for r in user_input.split(",") if r.strip()]
-                print(f"解析到 {len(new_rules)} 条规则: {new_rules}")
-            else:
-                modify_rules = False
-
-        print("\n[5/9] 是否需要修改最大同时下载数? (y/n)")
-        modify_max_leech = input(">>> ").strip().lower() == "y"
-        max_leech_num = None
-        if modify_max_leech:
-            user_input = input("请输入新的最大同时下载数（留空=不限制）: ").strip()
-            max_leech_num = int(user_input) if user_input.isdigit() else ""
-
-        print("\n[6/9] 是否需要修改删种间隔? (y/n)")
-        modify_cron = input(">>> ").strip().lower() == "y"
-        auto_delete_cron = None
-        if modify_cron:
-            cron_options = {
-                "1": "*/15 * * * * *", "2": "*/30 * * * * *",
-                "3": "0 */1 * * * *",  "4": "0 */5 * * * *",
-                "5": "0 */10 * * * *",
-            }
-            print("1.每15秒  2.每30秒  3.每1分钟  4.每5分钟  5.每10分钟  6.自定义")
-            choice = input("请输入选项(1-6): ").strip()
-            if choice in cron_options:
-                auto_delete_cron = cron_options[choice]
-            elif choice == "6":
-                auto_delete_cron = input("请输入自定义cron表达式: ").strip() or None
-            if not auto_delete_cron:
-                modify_cron = False
-
-        print("\n[7/9] 是否需要修改最小剩余空间? (y/n)")
-        modify_min_space = input(">>> ").strip().lower() == "y"
-        min_free_space = min_free_space_unit = None
-        if modify_min_space:
-            user_input = input("请输入大小（数字）: ").strip()
-            if user_input.isdigit():
-                min_free_space  = str(int(user_input))
-                unit_choice     = input("单位: 1.GiB 2.MiB 3.TiB (默认1): ").strip()
-                min_free_space_unit = {"1": "GiB", "2": "MiB", "3": "TiB", "": "GiB"}.get(unit_choice, "GiB")
-            else:
-                modify_min_space = False
-
-        print("\n[8/9] 是否需要修改上传速度上限? (y/n)")
-        modify_max_upload = input(">>> ").strip().lower() == "y"
-        max_upload_speed = max_upload_speed_unit = None
-        if modify_max_upload:
-            user_input = input("请输入速度上限（数字，留空=不限制）: ").strip()
-            if user_input.isdigit():
-                max_upload_speed      = str(int(user_input))
-                unit_choice           = input("单位: 1.MiB 2.KiB 3.GiB (默认1): ").strip()
-                max_upload_speed_unit = {"1": "MiB", "2": "KiB", "3": "GiB", "": "MiB"}.get(unit_choice, "MiB")
-            else:
-                max_upload_speed      = ""
-                max_upload_speed_unit = "MiB"
-
-        if not any([modify_rules, modify_max_leech, modify_cron, modify_min_space, modify_max_upload]):
-            print("\n❌ 未选择任何修改项，操作取消")
-            return
-
-        print(f"\n[9/9] 即将修改 {len(filtered_clients)} 个客户端")
-        if modify_rules:      print(f"  - 删种规则: {new_rules}")
-        if modify_max_leech:  print(f"  - 最大下载数: {max_leech_num if max_leech_num != '' else '不限制'}")
-        if modify_cron:       print(f"  - 删种间隔: {auto_delete_cron}")
-        if modify_min_space:  print(f"  - 最小剩余空间: {min_free_space} {min_free_space_unit}")
-        if modify_max_upload: print(f"  - 上传速度上限: {max_upload_speed or '不限制'} {max_upload_speed_unit or ''}")
-
-        if input("\n确认继续? (y/n): ").strip().lower() != "y":
-            print("❌ 操作已取消")
-            return
-
-        success_count = fail_count = 0
-        for client in filtered_clients:
-            print(f"\n正在修改: {client['alias']}")
-            result = self.modify_client(
-                client,
-                new_rules=new_rules if modify_rules else None,
-                max_leech_num=max_leech_num if modify_max_leech else None,
-                auto_delete_cron=auto_delete_cron if modify_cron else None,
-                min_free_space=min_free_space if modify_min_space else None,
-                min_free_space_unit=min_free_space_unit if modify_min_space else None,
-                max_upload_speed=max_upload_speed if modify_max_upload else None,
-                max_upload_speed_unit=max_upload_speed_unit if modify_max_upload else None,
-            )
-            if result and result.get("success"):
-                print("  ✓ 修改成功"); success_count += 1
-            else:
-                print("  ✗ 修改失败"); fail_count += 1
-
-        print("\n" + "=" * 60)
-        print(f"修改完成！  成功: {success_count}  失败: {fail_count}")
-        print("=" * 60)
+            print(f"  - {field}: {value}")
 
 
 # ══════════════════════════════════════════════════════════════════
-# RSSModifier  （RSS任务批量修改）
+# 执行修改
 # ══════════════════════════════════════════════════════════════════
 
-class RSSModifier:
-    def __init__(self, cookie_provider: CookieProvider,
-                 base_url: str, filter_keyword: str = ""):
-        self.cp             = cookie_provider
-        self.base_url       = base_url.rstrip("/") + "/api/rss"
-        self.filter_keyword = filter_keyword
-
-    def _get(self, url: str) -> Optional[dict]:
-        try:
-            kw = self.cp.apply({"timeout": 15})
-            r  = requests.get(url, **kw)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            print(f"请求失败 [{url}]: {e}")
-            return None
-
-    def _post(self, url: str, payload: dict) -> Optional[dict]:
-        try:
-            kw = self.cp.apply({"json": payload, "timeout": 15})
-            r  = requests.post(url, **kw)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            print(f"请求失败 [{url}]: {e}")
-            return None
-
-    def get_rss_list(self) -> Optional[dict]:
-        return self._get(f"{self.base_url}/list")
-
-    def filter_rss_tasks(self, data: dict) -> list:
-        if not data or not data.get("success"):
-            return []
-        return [t for t in data.get("data", []) if self.filter_keyword in t.get("alias", "")]
-
-    def modify_rss_task(self, task: dict, client_sort_by=None,
-                        max_client_download_count=None, skip_same_torrent=None,
-                        cron=None, client_arr=None) -> Optional[dict]:
-        payload = task.copy()
-        if client_sort_by            is not None: payload["clientSortBy"]           = client_sort_by
-        if max_client_download_count is not None: payload["maxClientDownloadCount"] = max_client_download_count
-        if skip_same_torrent         is not None: payload["skipSameTorrent"]        = skip_same_torrent
-        if cron                      is not None: payload["cron"]                   = cron
-        if client_arr                is not None: payload["clientArr"]              = client_arr
-        return self._post(f"{self.base_url}/modify", payload)
-
-    def run(self):
-        print("=" * 60)
-        print("Vertex RSS任务 批量修改工具")
-        print("=" * 60)
-
-        print("\n[1/8] 正在获取RSS任务列表...")
-        data = self.get_rss_list()
-        if not data:
-            print("❌ 获取RSS列表失败")
-            return
-
-        if not self.filter_keyword:
-            print("\n[2/8] 请输入要筛选的alias关键字（留空=修改所有）:")
-            self.filter_keyword = input(">>> ").strip()
-
-        filtered_tasks = self.filter_rss_tasks(data) if self.filter_keyword else data.get("data", [])
-        if not filtered_tasks:
-            print("❌ 未找到匹配的RSS任务")
-            return
-
-        print(f"✓ 找到 {len(filtered_tasks)} 个RSS任务:")
-        for i, task in enumerate(filtered_tasks, 1):
-            client_arr = task.get("clientArr", [])
-            print(f"  {i}. {task['alias']} (ID: {task['id']})")
-            print(f"     当前排序方式: {task.get('clientSortBy', '未设置')}")
-            print(f"     当前下载器任务上限: {task.get('maxClientDownloadCount', '未设置')}")
-            print(f"     当前跳过相同种子: {task.get('skipSameTorrent', False)}")
-            print(f"     当前抓取间隔: {task.get('cron', '未设置')}")
-            print(f"     当前下载器列表: [{', '.join(client_arr)}]" if client_arr else "     当前下载器列表: （空）")
-
-        print("\n[4/8] 是否需要修改客户端排序规则? (y/n)")
-        modify_sort = input(">>> ").strip().lower() == "y"
-        client_sort_by = None
-        if modify_sort:
-            print("1. uploadSpeed  2. leechingCount")
-            choice = input("请输入选项(1-2): ").strip()
-            client_sort_by = {"1": "uploadSpeed", "2": "leechingCount"}.get(choice)
-            if not client_sort_by:
-                modify_sort = False
-
-        print("\n[5/8] 是否需要修改下载器任务上限? (y/n)")
-        modify_max_download = input(">>> ").strip().lower() == "y"
-        max_client_download_count = None
-        if modify_max_download:
-            user_input = input("请输入新的下载器任务上限（留空=不限制）: ").strip()
-            max_client_download_count = str(int(user_input)) if user_input.isdigit() else ""
-
-        print("\n[6/8] 是否需要修改跳过相同种子设置? (y/n)")
-        modify_skip_same = input(">>> ").strip().lower() == "y"
-        skip_same_torrent = None
-        if modify_skip_same:
-            print("1. 启用 (true)  2. 禁用 (false)")
-            choice = input("请输入选项(1-2): ").strip()
-            if choice == "1":   skip_same_torrent = True
-            elif choice == "2": skip_same_torrent = False
-            else:               modify_skip_same = False
-
-        print("\n[7/8] 是否需要修改RSS抓取间隔(cron)? (y/n)")
-        modify_cron = input(">>> ").strip().lower() == "y"
-        rss_cron = None
-        if modify_cron:
-            cron_options = {
-                "1": "*/5 * * * * *",  "2": "*/46 * * * * *",
-                "3": "* * * * *",      "4": "*/5 * * * *",
-                "5": "*/10 * * * *",   "6": "*/30 * * * *",
-            }
-            print("1.每5秒  2.每46秒  3.每1分钟  4.每5分钟  5.每10分钟  6.每30分钟  7.自定义")
-            choice = input("请输入选项(1-7): ").strip()
-            if choice in cron_options:
-                rss_cron = cron_options[choice]
-            elif choice == "7":
-                rss_cron = input("请输入自定义cron表达式: ").strip() or None
-            if not rss_cron:
-                modify_cron = False
-
-        # ── [8/8] 修改下载器列表 ──────────────────────────────
-        print("\n[8/8] 是否需要修改下载器列表(clientArr)? (y/n)")
-        modify_client_arr = input(">>> ").strip().lower() == "y"
-        client_arr        = None   # 覆盖写入模式：固定新列表
-        _delete_ids: list = []     # 删除模式：要移除的ID集合
-        _arr_mode         = None   # "overwrite" | "delete"
-
-        if modify_client_arr:
-            print("  操作模式:")
-            print("  1. 覆盖写入  —  输入新列表，所有任务替换为该列表")
-            print("  2. 删除指定  —  从每个任务的现有列表中移除指定ID")
-            arr_mode_choice = input("  请选择模式 (1/2，默认1): ").strip() or "1"
-
-            if arr_mode_choice == "2":
-                # ── 删除模式 ──────────────────────────────────
-                user_input  = input("  请输入要删除的下载器ID（逗号分隔）: ").strip()
-                _delete_ids = [cid.strip() for cid in user_input.split(",") if cid.strip()]
-                if _delete_ids:
-                    _arr_mode = "delete"
-                    print(f"  将从每个任务的下载器列表中移除: {_delete_ids}")
+def apply_changes(api: Api, kind: str, items: list, changes: dict):
+    path = "/api/downloader/modify" if kind == "downloader" else "/api/rss/modify"
+    ok = fail = 0
+    for it in items:
+        payload = dict(it)
+        for field, value in changes.items():
+            if field == "clientArr":
+                # 计算新 clientArr
+                base = list(it.get("clientArr", []))
+                if isinstance(value, dict):
+                    if "append" in value:
+                        base += [x for x in value["append"] if x not in base]
+                    if "remove" in value:
+                        base = [x for x in base if x not in value["remove"]]
                 else:
-                    print("  ⚠  未输入任何ID，跳过此项")
-                    modify_client_arr = False
+                    base = list(value)
+                payload["clientArr"] = base
+                # 联动维护 reseedClients（仅当该键存在于响应中，缺失版本不处理）
+                if isinstance(it.get("reseedClients"), list):
+                    if isinstance(value, dict) and "remove" in value:
+                        payload["reseedClients"] = [x for x in it["reseedClients"]
+                                                    if x not in value["remove"]]
+                    elif it.get("rssReseed"):
+                        if isinstance(value, dict) and "append" in value:
+                            cur = list(it["reseedClients"])
+                            cur += [x for x in value["append"] if x not in cur]
+                            payload["reseedClients"] = cur
+                        else:  # 覆盖/清空：只保留仍在新列表中的
+                            payload["reseedClients"] = [x for x in it["reseedClients"]
+                                                        if x in base]
             else:
-                # ── 覆盖写入模式 ───────────────────────────────
-                user_input = input("  请输入下载器ID（逗号分隔，留空=清空）: ").strip()
-                client_arr = [cid.strip() for cid in user_input.split(",") if cid.strip()] if user_input else []
-                _arr_mode  = "overwrite"
-
-        if not any([modify_sort, modify_max_download, modify_skip_same, modify_cron, modify_client_arr]):
-            print("\n❌ 未选择任何修改项，操作取消")
-            return
-
-        print(f"\n即将修改 {len(filtered_tasks)} 个RSS任务:")
-        if modify_sort:         print(f"  - 排序方式: {client_sort_by}")
-        if modify_max_download: print(f"  - 下载器任务上限: {max_client_download_count or '不限制'}")
-        if modify_skip_same:    print(f"  - 跳过相同种子: {'启用' if skip_same_torrent else '禁用'}")
-        if modify_cron:         print(f"  - RSS抓取间隔: {rss_cron}")
-        if modify_client_arr:
-            if _arr_mode == "delete":
-                print(f"  - 下载器列表: 从每个任务中删除 {_delete_ids}")
-            else:
-                print(f"  - 下载器列表: 覆盖为 {client_arr if client_arr else '（清空）'}")
-
-        if input("\n确认继续? (y/n): ").strip().lower() != "y":
-            print("❌ 操作已取消")
-            return
-
-        success_count = fail_count = 0
-        for task in filtered_tasks:
-            print(f"\n正在修改: {task['alias']}")
-
-            # 计算本任务实际写入的 clientArr
-            effective_client_arr = None
-            if modify_client_arr:
-                if _arr_mode == "delete":
-                    original             = task.get("clientArr", [])
-                    effective_client_arr = [cid for cid in original if cid not in _delete_ids]
-                    removed              = [cid for cid in original if cid in _delete_ids]
-                    print(f"  原列表: [{', '.join(original)}]")
-                    if removed:
-                        print(f"  移除:   [{', '.join(removed)}]")
-                    else:
-                        print(f"  移除:   （该任务中无匹配ID，无需移除）")
-                    print(f"  剩余:   [{', '.join(effective_client_arr)}]")
-                else:
-                    effective_client_arr = client_arr
-
-            result = self.modify_rss_task(
-                task,
-                client_sort_by=client_sort_by if modify_sort else None,
-                max_client_download_count=max_client_download_count if modify_max_download else None,
-                skip_same_torrent=skip_same_torrent if modify_skip_same else None,
-                cron=rss_cron if modify_cron else None,
-                client_arr=effective_client_arr if modify_client_arr else None,
-            )
-            if result and result.get("success"):
-                print("  ✓ 修改成功"); success_count += 1
-            else:
-                print("  ✗ 修改失败"); fail_count += 1
-
-        print("\n" + "=" * 60)
-        print(f"修改完成！  成功: {success_count}  失败: {fail_count}")
-        print("=" * 60)
+                payload[field] = value
+        # reseed=on 且响应带 reseedClients 键但为空时，自动填该任务 clientArr
+        if (changes.get("rssReseed") is True and "reseedClients" in payload
+                and not payload.get("reseedClients")):
+            payload["reseedClients"] = list(payload.get("clientArr") or [])
+        res = api.post(path, payload)
+        if res and res.get("success"):
+            print(f"  ✓ {it.get('alias', it['id'])} 修改成功")
+            ok += 1
+        else:
+            print(f"  ✗ {it.get('alias', it['id'])} 修改失败: {res}")
+            fail += 1
+    print(f"\n完成！成功 {ok}，失败 {fail}")
 
 
 # ══════════════════════════════════════════════════════════════════
-# 入口
+# 主流程
 # ══════════════════════════════════════════════════════════════════
+
+def main():
+    ap = argparse.ArgumentParser(description="Vertex 批量修改工具（下载器 / RSS）")
+    ap.add_argument("--url", default=None, help="Vertex 地址（默认读 config.yaml / 环境变量 VTURL）")
+    ap.add_argument("--user", default=None, help=f"账号（默认 {DEFAULT_USERNAME}）")
+    ap.add_argument("--pwd", default=None, help="密码（明文，自动MD5；或直接传MD5）")
+    ap.add_argument("--kw", default="", help="筛选 alias 关键字")
+    ap.add_argument("--rss", action="store_true", help="修改 RSS 任务")
+    ap.add_argument("--dl", action="store_true", help="修改下载器（默认）")
+    ap.add_argument("--force-cookie", action="store_true", help="强制重新登录获取 Cookie")
+    ap.add_argument("--yes", "-y", action="store_true", help="跳过确认直接执行")
+    ap.add_argument("--list", action="store_true", help="仅查看列表与规则，不修改")
+    ap.add_argument("instructions", nargs="*", help="修改指令，如 rules=1,2 cron=3 up=50MiB")
+    args = ap.parse_args()
+
+    # ── 配置来源：命令行 > config.yaml > 环境变量 > 交互 ──────────
+    cfg = load_yaml_config()
+    url = args.url or cfg.get("url") or os.getenv("VTURL") or ""
+    user = args.user or cfg.get("username") or os.getenv("VT_USERNAME") or DEFAULT_USER
+    pwd = (args.pwd or cfg.get("password") or cfg.get("password_md5")
+           or os.getenv("VT_PASSWORD") or "")
+
+    if not url:
+        url = input("Vertex 地址（例: http://YOUR-VERTEX-IP:3077）: ").strip().rstrip("/")
+    if not pwd:
+        pwd = input("Vertex 密码（明文，将自动 MD5）: ").strip()
+    if not url or not pwd:
+        sys.exit("❌ 缺少 Vertex 地址/密码，程序退出")
+    user = user or DEFAULT_USER
+
+    api = Api(url, user, pwd, args.force_cookie)
+    if args.rss:
+        kind = "rss"
+    elif args.dl:
+        kind = "downloader"
+    elif args.instructions or args.list or args.kw:
+        kind = "downloader"
+    else:
+        print("\n请选择操作对象:")
+        print("  1. 下载器 (Downloader)")
+        print("  2. RSS 任务")
+        kind = "rss" if input("请输入选项 (1/2，默认1): ").strip() == "2" else "downloader"
+    spec = RSS_SPEC if kind == "rss" else DL_SPEC
+    list_path = "/api/rss/list" if kind == "rss" else "/api/downloader/list"
+
+    print(f"正在获取列表: {url}{list_path} ...")
+    data = api.get(list_path)
+    if not data or not data.get("success"):
+        sys.exit(f"❌ 获取列表失败: {data}")
+    all_items = data.get("data", [])
+
+    kw = args.kw or input("筛选 alias 关键字（留空 = 全部）: ").strip()
+    filtered = [it for it in all_items if kw in it.get("alias", "")] if kw else all_items
+    if not filtered:
+        sys.exit("❌ 未找到匹配项")
+
+    show_items(api, kind, filtered)
+    if args.list:
+        return
+
+    if args.instructions:
+        segments = args.instructions
+    else:
+        print_help(kind)
+        print("\n输入修改指令（回车 = 仅查看）:")
+        segments = [input(">>> ").strip()]
+
+    changes = parse_instructions(segments, spec) if any(segments) else {}
+    if not changes:
+        print("\n未输入有效指令，本次仅查看。")
+        return
+
+    show_summary(kind, changes)
+    if not args.yes:
+        if input("\n确认执行？(回车确认 / n 取消): ").strip().lower() in ("n", "no", "否"):
+            print("已取消")
+            return
+
+    apply_changes(api, kind, filtered, changes)
+
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Vertex 批量修改工具  (Cookie 自动刷新版)")
-    print("=" * 60)
-
-    if _COOKIE_MODULE_AVAILABLE:
-        manager  = build_cookie_manager()
-        provider = CookieProvider(manager=manager)
-        base_url = manager.login_url if manager else "http://23.82.99.203:3077"
-    else:
-        provider = CookieProvider(manager=None, cookies_file="cookies.txt")
-        base_url = "http://23.82.99.203:3077"
-
-    print("\n请选择要使用的功能:")
-    print("1. 修改 Downloader（下载器）")
-    print("2. 修改 RSS 任务")
-    choice = input("\n请输入选项 (1 或 2): ").strip()
-
-    if choice == "1":
-        modifier = VertexModifier(provider, base_url, filter_keyword="NC")
-        modifier.run()
-    elif choice == "2":
-        rss_modifier = RSSModifier(provider, base_url, filter_keyword="")
-        rss_modifier.run()
-    else:
-        print("❌ 无效的选项，程序退出")
+    main()

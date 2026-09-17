@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import time
 import logging
@@ -49,7 +49,7 @@ VALID_STRATEGIES = {STRATEGY_UPLOAD_SPEED, STRATEGY_TORRENT_COUNT, STRATEGY_FREE
 @dataclass
 class QBServer:
     url: str
-    proxy_id:      str  = ''    # VT 模式下的原始 proxy_id（如 d85456e1）
+    proxy_id:      str  = ''    # VT 模式下的原始 proxy_id（如 xxxxxxxx）
     upload_speed:  Optional[int] = None
     torrent_count: Optional[int] = None
     free_space:    Optional[int] = None
@@ -393,7 +393,7 @@ class TorrentDistributor:
         logger.info(f"已加载 {len(self.qb_servers)} 个 VT 代理")
 
     def add_server(self, identifier: str) -> bool:
-        """VT 模式：identifier = proxy_id（如 d85456e1），自动拼接完整 URL。"""
+        """VT 模式：identifier = proxy_id（如 xxxxxxxx），自动拼接完整 URL。"""
         with self._lock:
             identifier = identifier.strip().rstrip('/')
             if not identifier:
@@ -577,7 +577,7 @@ def _admin_auth():
 # ── Webhook ─────────────────────────────────────────────────────────────────────
 @app.route('/<path:webhook_path>', methods=['POST'])
 def webhook_handler(webhook_path):
-    expected = os.getenv('WEBHOOK_PATH', 'webhook/secure-a812c2e1-4b1d-9813-ab113-ef489')
+    expected = os.getenv('WEBHOOK_PATH', 'webhook/secure-xxxxxxxxxxxxxxxxxxxxxxxxxxxx')
     if webhook_path != expected:
         return jsonify({'status': 'error', 'message': 'Invalid webhook path'}), 404
     try:
@@ -717,7 +717,7 @@ def admin_get_logs():
 
 # ── 启动 ────────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
-    webhook_path = os.getenv('WEBHOOK_PATH', 'webhook/secure-a812c2e1-4b1d-9813-ab113-ef489')
+    webhook_path = os.getenv('WEBHOOK_PATH', 'webhook/secure-xxxxxxxxxxxxxxxxxxxxxxxxxxxx')
     port = int(os.getenv('FLASK_PORT', '5000'))
     logger.info("=" * 60)
     logger.info(f"Webhook: /{webhook_path}  端口: {port}")
