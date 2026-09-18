@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -316,6 +316,7 @@ body::after {
 .sc-blue   { background:var(--g-blue);   color:#fff; }
 .sc-violet { background:var(--g-violet); color:#fff; }
 .sc-green  { background:var(--g-green);  color:#fff; }
+.sc-emerald{ background:linear-gradient(135deg,#059669,#0d9488); color:#fff; }
 .sc-rose   { background:var(--g-rose);   color:#fff; }
 .sc-amber  { background:var(--g-amber);  color:#fff; }
 .sc-cyan   { background:var(--g-cyan);   color:#fff; }
@@ -584,6 +585,76 @@ textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
 
 /* ── 响应式断点 ── */
 
+/* ── PRIMARY IP 管理 ── */
+.ip-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.ip-select-all { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink2); font-weight:600; cursor:pointer; user-select:none; }
+.ip-table { display:flex; flex-direction:column; gap:10px; }
+.ip-row {
+  display:flex; align-items:center; gap:14px;
+  background:var(--glass2); border:1px solid var(--border-g);
+  border-radius:16px; padding:14px 18px;
+  box-shadow:var(--shadow-soft); transition:all .2s;
+}
+.ip-row:hover { box-shadow:var(--shadow-lift); border-color:var(--border-g2); }
+.ip-row.locked { border-color:rgba(124,58,237,.35); background:linear-gradient(135deg,rgba(124,58,237,.06),rgba(255,255,255,.95)); }
+.ip-check { flex-shrink:0; }
+.ip-check input { width:16px; height:16px; accent-color:var(--blue); cursor:pointer; }
+.ip-main { flex:1; min-width:0; }
+.ip-name { font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.ip-addr { font-family:var(--mono); font-size:13px; font-weight:700; color:var(--blue); background:rgba(67,97,238,.08); padding:3px 10px; border-radius:7px; display:inline-block; }
+.ip-sub { font-size:11px; color:var(--ink3); margin-top:5px; display:flex; gap:12px; flex-wrap:wrap; }
+.ip-sub span { display:inline-flex; align-items:center; gap:4px; }
+.ip-right { display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:wrap; }
+.lock-badge {
+  font-size:10px; font-weight:800; padding:4px 10px; border-radius:99px;
+  background:#ede9fe; color:var(--violet); border:1px solid #c4b5fd;
+  cursor:pointer; user-select:none; transition:all .15s; letter-spacing:.4px;
+}
+.lock-badge:hover { filter:brightness(.96); }
+.lock-badge.on { background:var(--g-violet); color:#fff; border-color:transparent; box-shadow:0 3px 10px rgba(124,58,237,.3); }
+.ip-assignee { font-size:11px; padding:3px 9px; border-radius:99px; font-weight:700; }
+.ip-assignee.used { background:#d1fae5; color:#047857; }
+.ip-assignee.free { background:#f3f4f6; color:var(--ink3); }
+.ip-type { font-size:10px; font-weight:800; padding:3px 8px; border-radius:6px; letter-spacing:.5px; }
+.ip-type.v4 { background:rgba(14,165,233,.12); color:var(--cyan); }
+.ip-type.v6 { background:rgba(124,58,237,.12); color:var(--violet); }
+.batch-bar {
+  display:flex; align-items:center; gap:10px; padding:11px 16px;
+  background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(14,165,233,.06));
+  border:1px solid rgba(124,58,237,.22); border-radius:14px; margin-bottom:14px;
+  font-size:12px; color:var(--ink2); flex-wrap:wrap;
+}
+.res-list { display:flex; flex-direction:column; gap:7px; margin-top:10px; max-height:300px; overflow-y:auto; }
+.res-row { display:flex; align-items:center; gap:8px; font-size:12px; padding:8px 12px; border-radius:9px; font-family:var(--mono); }
+.res-row.ok { background:rgba(16,185,129,.08); color:#047857; }
+.res-row.fail { background:rgba(244,63,94,.08); color:var(--rose); }
+
+/* ── 产品总览 ── */
+.prod-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; }
+.prod-card { background:var(--glass2); border:1px solid var(--border-g); border-radius:20px; padding:18px 20px; box-shadow:var(--shadow-soft); }
+.prod-hd { display:flex; align-items:center; gap:10px; margin-bottom:13px; }
+.prod-ic { width:36px; height:36px; border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+.prod-title { font-size:13px; font-weight:800; color:var(--ink); }
+.prod-count { margin-left:auto; font-family:var(--mono); font-size:16px; font-weight:800; color:var(--blue); }
+.prod-list { display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; }
+.prod-item { display:flex; align-items:center; gap:9px; font-size:12px; padding:7px 11px; background:var(--white); border:1px solid var(--border-g); border-radius:9px; color:var(--ink2); }
+.prod-item .mono { font-family:var(--mono); font-weight:700; color:var(--blue); }
+.prod-item .mut { margin-left:auto; color:var(--ink4); font-size:11px; }
+.prod-empty { font-size:11px; color:var(--ink4); padding:12px; text-align:center; }
+
+/* ── 价格 / 可用性 ── */
+.price-tag { font-family:var(--mono); font-size:12px; font-weight:700; color:#047857; background:rgba(16,185,129,.09); padding:3px 9px; border-radius:7px; }
+.price-tag small { font-weight:500; color:var(--ink3); font-size:10px; }
+.avail { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; }
+.avail.yes { background:rgba(16,185,129,.12); color:#047857; }
+.avail.no { background:rgba(244,63,94,.1); color:var(--rose); }
+.avail.dep { background:rgba(245,158,11,.12); color:#92400e; }
+.cat-loc-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+.cat-loc-bar .loc-label { font-size:11px; font-weight:700; color:var(--ink3); text-transform:uppercase; letter-spacing:.8px; }
+.ip-select { min-width:130px; }
+
+/* 响应式断点 */
+
 /* 大屏（>1400px）：侧边栏可更宽，内容更舒展 */
 @media(min-width:1400px) {
   .stats-row { grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); }
@@ -671,6 +742,140 @@ textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
   .ph-right  { flex-wrap: wrap; }
   .btn { font-size: 12px; padding: 8px 12px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MINIMALISM THEME OVERRIDE
+   白底 / 细边框 / 弱阴影 / 单色强调 / 内容区居中
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{
+  --sky:#f6f7f9;
+  --cloud:#f1f3f5;
+  --white:#ffffff;
+  --glass:#ffffff;
+  --glass2:#ffffff;
+  --border-g:#e6e8ec;
+  --border-g2:#d9dde3;
+  --ink:#16181d;
+  --ink2:#4b5563;
+  --ink3:#8b929c;
+  --ink4:#b8bec7;
+  --blue:#2563eb;
+  --blue2:#3b82f6;
+  --violet:#7c3aed;
+  --cyan:#0891b2;
+  --emerald:#059669;
+  --rose:#dc2626;
+  --amber:#d97706;
+  --orange:#ea580c;
+  --g-hero:linear-gradient(135deg,#2563eb,#7c3aed);
+  --g-blue:linear-gradient(135deg,#2563eb,#3b82f6);
+  --g-violet:linear-gradient(135deg,#7c3aed,#8b5cf6);
+  --g-cyan:linear-gradient(135deg,#0891b2,#06b6d4);
+  --g-green:linear-gradient(135deg,#059669,#10b981);
+  --g-rose:linear-gradient(135deg,#dc2626,#ef4444);
+  --g-amber:linear-gradient(135deg,#d97706,#f59e0b);
+  --g-orange:linear-gradient(135deg,#ea580c,#f97316);
+  --shadow-soft:0 1px 2px rgba(16,18,23,.05);
+  --shadow-lift:0 4px 16px rgba(16,18,23,.08);
+  --shadow-float:0 16px 40px rgba(16,18,23,.14);
+  --r:12px; --r2:8px; --r3:16px;
+}
+body{background:var(--sky);color:var(--ink);}
+body::before,body::after{display:none !important;}
+
+/* 侧边栏 / 卡片：去掉玻璃与漂浮感 */
+.sidebar{background:#fff;backdrop-filter:none;box-shadow:none;border-right:1px solid var(--border-g);}
+.sb-head{border-bottom:1px solid var(--border-g);}
+.mon-status{box-shadow:none;border:1px solid var(--border-g);}
+.nav-item.active{background:rgba(37,99,235,.08);box-shadow:none;}
+.nav-item:hover{background:rgba(37,99,235,.05);}
+.gcard,.sv-card,.snap-card,.task-card,.dl-card,.ip-row,.prod-card,.modal-box,
+.login-card,.log-box,.sch-timeline,.ct-card{
+  backdrop-filter:none;
+  box-shadow:var(--shadow-soft);
+  border-color:var(--border-g);
+}
+.gcard:hover,.sv-card:hover,.snap-card:hover,.ip-row:hover,.ct-card:hover{
+  transform:none;
+  box-shadow:var(--shadow-lift);
+}
+.sch-timeline{background:#fff;}
+
+/* 内容区居中 */
+@media(min-width:861px){ .main{padding:36px 44px;} }
+.main > .page{max-width:1240px;margin:0 auto;}
+
+/* 统计卡：白底 + 左侧色条 */
+.sc{box-shadow:var(--shadow-soft);}
+.sc-blue,.sc-violet,.sc-green,.sc-emerald,.sc-rose,.sc-amber,.sc-cyan{
+  background:#fff;color:var(--ink);
+}
+.sc-blue{box-shadow:inset 3px 0 0 var(--blue),var(--shadow-soft);}
+.sc-violet{box-shadow:inset 3px 0 0 var(--violet),var(--shadow-soft);}
+.sc-green{box-shadow:inset 3px 0 0 var(--emerald),var(--shadow-soft);}
+.sc-emerald{box-shadow:inset 3px 0 0 #0d9488,var(--shadow-soft);}
+.sc-rose{box-shadow:inset 3px 0 0 var(--rose),var(--shadow-soft);}
+.sc-amber{box-shadow:inset 3px 0 0 var(--amber),var(--shadow-soft);}
+.sc-cyan{box-shadow:inset 3px 0 0 var(--cyan),var(--shadow-soft);}
+.sc-label{opacity:1;color:var(--ink3);}
+.sc-foot{opacity:1;color:var(--ink4);}
+.sc-icon{opacity:.12;}
+.sc:hover{transform:none;box-shadow:var(--shadow-lift);}
+
+/* 按钮：扁平化 */
+.btn-primary{background:var(--blue);box-shadow:none;}
+.btn-primary:hover{background:#1d4ed8;box-shadow:none;transform:none;}
+.btn-success{background:#ecfdf5;border:1.5px solid #a7f3d0;color:#047857;}
+.btn-success:hover{background:#059669;color:#fff;border-color:transparent;box-shadow:none;}
+.btn-danger{background:#fef2f2;border:1.5px solid #fecaca;color:var(--rose);}
+.btn-danger:hover{background:var(--rose);color:#fff;border-color:transparent;box-shadow:none;}
+.btn-warn{background:#fffbeb;border:1.5px solid #fde68a;color:#92400e;}
+.btn-violet{background:#f5f3ff;border:1.5px solid #ddd6fe;color:var(--violet);}
+.btn-auth{background:var(--blue);box-shadow:none;}
+.btn-auth:hover{transform:none;background:#1d4ed8;box-shadow:none;}
+
+.info-box{background:#f8fafc;border:1px solid var(--border-g);}
+.login-card{background:#fff;border:1px solid var(--border-g);}
+.login-card::before{background:var(--blue);}
+
+/* 型号优先级 chips（可拖动排序） */
+.chip-pri{cursor:grab;user-select:none;}
+.chip-pri:active{cursor:grabbing;}
+.chip-pri.dragging{opacity:.45;}
+.chip-pri-num{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;border-radius:4px;background:var(--blue);color:#fff;
+  font-size:9px;font-weight:800;font-family:var(--sans);
+}
+.chip-mv{
+  cursor:pointer;color:var(--ink3);font-size:12px;line-height:1;
+  padding:0 2px;border-radius:3px;transition:all .12s;
+}
+.chip-mv:hover{color:var(--blue);background:rgba(37,99,235,.1);}
+
+/* 通用任务卡 */
+.task-card{background:#fff;}
+.task-card::before{width:3px;border-radius:3px 0 0 3px;}
+.task-del::before{background:var(--rose);}
+.task-cre::before{background:var(--emerald);}
+.task-sync::before{background:var(--cyan);}
+.task-del .task-icon-box{background:#fef2f2;}
+.task-cre .task-icon-box{background:#ecfdf5;}
+.task-sync .task-icon-box{background:#ecfeff;}
+.task-off{opacity:.55;}
+.wd-chip{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:30px;height:28px;padding:0 6px;border-radius:8px;
+  border:1px solid var(--border-g2);background:#fff;color:var(--ink3);
+  font-size:11px;font-weight:700;cursor:pointer;transition:all .12s;
+}
+.wd-chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+.alloc-row{
+  display:flex;align-items:center;gap:8px;font-size:12px;
+  padding:8px 12px;border-radius:9px;font-family:var(--mono);
+  background:#f8fafc;border:1px solid var(--border-g);
+}
+.alloc-row .mut{color:var(--ink4);margin-left:auto;font-size:11px;}
 </style>
 </head>
 <body>
@@ -747,6 +952,11 @@ textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
         <div class="nav-item" data-p="catalog" onclick="nav('catalog')"><span class="nav-icon">📋</span><span>型号参考</span></div>
       </div>
       <div class="sb-section">
+        <div class="sb-cat">网络</div>
+        <div class="nav-item" data-p="ips" onclick="nav('ips')"><span class="nav-icon">🌐</span><span>IP 管理</span></div>
+        <div class="nav-item" data-p="products" onclick="nav('products')"><span class="nav-icon">📦</span><span>产品总览</span></div>
+      </div>
+      <div class="sb-section">
         <div class="sb-cat">系统</div>
         <div class="nav-item" data-p="schedule" onclick="nav('schedule')"><span class="nav-icon">⏰</span><span>定时任务</span></div>
         <div class="nav-item" data-p="monitor-cfg" onclick="nav('monitor-cfg')"><span class="nav-icon">🔧</span><span>监控配置</span></div>
@@ -781,6 +991,7 @@ textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
         <div class="sc sc-rose"><div class="sc-label">高流量预警</div><div class="sc-val" id="s-high">—</div><div class="sc-foot" id="s-thr-lbl">超过阈值</div><div class="sc-icon">🚨</div></div>
         <div class="sc sc-amber"><div class="sc-label">总出站流量</div><div class="sc-val" id="s-traffic">—<small>GB</small></div><div class="sc-foot">全部合计</div><div class="sc-icon">📡</div></div>
         <div class="sc sc-violet"><div class="sc-label">下次检查</div><div class="sc-val" id="s-next" style="font-size:18px;">—</div><div class="sc-foot">自动监控</div><div class="sc-icon">⏱</div></div>
+        <div class="sc sc-emerald"><div class="sc-label">月费用估算</div><div class="sc-val" id="s-cost">—<small>€</small></div><div class="sc-foot">按当前服务器月价合计</div><div class="sc-icon">💰</div></div>
         <div class="sc sc-cyan"><div class="sc-label">定时调度器</div><div class="sc-val" id="s-sched" style="font-size:18px;">—</div><div class="sc-foot" id="s-sched-sub">定时任务状态</div><div class="sc-icon">⏰</div></div>
       </div>
       <div id="dash-servers"><div class="loading"><div class="spin"></div> 加载中…</div></div>
@@ -825,13 +1036,24 @@ textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
         </div>
       </div>
       <div class="gcard gcard-pad" style="margin-bottom:18px;">
-        <div class="card-hd"><div class="card-title">⚙️ 连接配置</div><button class="btn btn-primary btn-sm" onclick="saveVertexCfg()">保存</button></div>
+        <div class="card-hd">
+          <div class="card-title">⚙️ 连接配置</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-base btn-sm" onclick="refreshVertexCookie()">🔑 刷新 Cookie</button>
+            <button class="btn btn-primary btn-sm" onclick="saveVertexCfg()">保存</button>
+          </div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-          <div class="fg"><label class="fl">入口地址</label><input class="inp" id="vcfg-url" placeholder="http://YOUR-VERTEX-IP:3077"></div>
+          <div class="fg"><label class="fl">入口地址</label><input class="inp" id="vcfg-url" placeholder="http://23.82.99.203:3077"></div>
           <div class="fg"><label class="fl">匹配关键词</label><input class="inp" id="vcfg-kw" placeholder="Hetzner"><div class="fh">只同步 alias 包含该关键词的下载器</div></div>
         </div>
-        <div class="fg"><label class="fl">Cookie 认证</label><textarea class="inp" id="vcfg-cookies" rows="2" placeholder="connect.sid=s%3A..."></textarea><div class="fh">留空则使用已保存的 Cookie</div></div>
-        <div id="vertex-conn-status" style="display:flex;gap:8px;align-items:center;margin-top:4px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+          <div class="fg"><label class="fl">登录用户名</label><input class="inp" id="vcfg-user" placeholder="admin"><div class="fh">用于自动登录刷新 Cookie</div></div>
+          <div class="fg"><label class="fl">登录密码</label><input class="inp" id="vcfg-pass" type="password" placeholder="明文密码，留空不修改"><div class="fh">明文会自动 MD5；32 位十六进制视为已哈希</div></div>
+          <div class="fg"><label class="fl">Cookie 探测间隔（秒）</label><input class="inp" id="vcfg-interval" type="number" min="30" placeholder="300"></div>
+        </div>
+        <div class="fg"><label class="fl">Cookie 认证</label><textarea class="inp" id="vcfg-cookies" rows="2" placeholder="connect.sid=s%3A..."></textarea><div class="fh">留空则使用已保存的 Cookie；配置用户名/密码后可自动登录刷新</div></div>
+        <div id="vertex-conn-status" style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap;"></div>
       </div>
       <div class="gcard gcard-pad" style="margin-bottom:18px;">
         <div class="card-hd"><div class="card-title">🔄 自动同步</div><div class="tog-sw" id="tog-vertex-sync" onclick="toggleField('vertex_sync_enabled','tog-vertex-sync')"></div></div>
@@ -847,20 +1069,63 @@ textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
     <!-- CATALOG -->
     <div class="page" id="page-catalog">
       <div class="ph">
-        <div class="ph-left"><h2>服务器型号参考</h2><p>点击型号可添加到优先级列表</p></div>
+        <div class="ph-left"><h2>服务器型号参考</h2><p>实时从 Hetzner API 拉取配置、价格与库存</p></div>
         <div class="ph-right">
           <select class="inp" id="cat-filter" onchange="renderCatalog()" style="width:110px;padding:8px 12px;">
             <option value="">全部系列</option>
             <option value="CX">CX 系列</option>
             <option value="CPX">CPX 系列</option>
             <option value="CAX">CAX 系列</option>
+            <option value="CCX">CCX 系列</option>
           </select>
+          <button class="btn btn-base" onclick="refreshCatalogApi()">🔄 刷新目录</button>
         </div>
+      </div>
+      <div class="cat-loc-bar">
+        <span class="loc-label">📍 查看地区价格</span>
+        <select class="inp ip-select" id="cat-price-loc" onchange="renderCatalog()"></select>
+        <span id="cat-updated" style="font-size:11px;color:var(--ink4);"></span>
       </div>
       <div class="info-box" style="margin-bottom:16px;">
         💡 点击型号卡片可添加到监控配置的重建优先级列表。当前优先级：<span id="cat-current-types" style="color:var(--blue);font-family:var(--mono);font-weight:700;"></span>
       </div>
       <div class="cat-grid" id="catalog-grid"></div>
+    </div>
+
+    <!-- PRIMARY IPs -->
+    <div class="page" id="page-ips">
+      <div class="ph">
+        <div class="ph-left"><h2>IP 管理</h2><p>Primary IP：批量创建 / 删除 / 锁定（重建时保留 IP）</p></div>
+        <div class="ph-right">
+          <button class="btn btn-base" onclick="loadIPs()">🔄 刷新</button>
+          <button class="btn btn-primary" onclick="openIPCreate()">＋ 批量创建</button>
+        </div>
+      </div>
+      <div class="batch-bar" id="batch-bar" style="display:none;">
+        <span>已选 <strong id="batch-count" style="color:var(--violet);font-family:var(--mono);">0</span> 个 IP</strong></span>
+        <button class="btn btn-danger btn-sm" onclick="batchDeleteIPs()">🗑 批量删除所选</button>
+        <button class="btn btn-violet btn-sm" onclick="batchLockIPs(true)">🔒 锁定所选</button>
+        <button class="btn btn-base btn-sm" onclick="batchLockIPs(false)">🔓 解锁所选</button>
+        <button class="btn btn-base btn-xs" onclick="clearIPSelection()">取消选择</button>
+      </div>
+      <label class="ip-select-all"><input type="checkbox" id="ip-select-all" onchange="onSelectAllChange()"> 全选</label>
+      <div class="ip-table" id="ip-list" style="margin-top:10px;">
+        <div class="loading"><div class="spin"></div></div>
+      </div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div class="page" id="page-products">
+      <div class="ph">
+        <div class="ph-left"><h2>产品总览</h2><p>账户下各类 Hetzner 产品一览</p></div>
+        <div class="ph-right">
+          <button class="btn btn-base" onclick="loadProducts()">🔄 刷新</button>
+        </div>
+      </div>
+      <div class="stats-row" id="prod-stats"></div>
+      <div class="prod-grid" id="prod-grid">
+        <div class="loading"><div class="spin"></div></div>
+      </div>
     </div>
 
     <!-- SCHEDULE -->
@@ -1157,7 +1422,7 @@ function updateSchedGrid(){
 window.addEventListener('resize', updateSchedGrid);
 
 /* ─── 核心逻辑（原版） ─── */
-const S={servers:[],config:{},catalog:{},serverTypes:[],monitorRunning:false,pollTimer:null};
+const S={servers:[],config:{},catalog:{},locations:[],primaryIPs:[],products:null,catalogUpdated:null,serverTypes:[],monitorRunning:false,pollTimer:null,ipSelected:new Set()};
 async function api(path,method='GET',body=null){const opts={method,credentials:'include',headers:{'Content-Type':'application/json'}};if(body)opts.body=JSON.stringify(body);const r=await fetch('/api'+path,opts);const d=await r.json();if(r.status===401){showLogin();throw new Error('Unauth');}return{ok:r.ok,status:r.status,data:d};}
 function toast(msg,type='ok'){const icons={ok:'✅',err:'❌',wrn:'⚠️'};const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`<span>${icons[type]}</span><span>${msg}</span>`;document.getElementById('toasts').appendChild(el);setTimeout(()=>el.remove(),3800);}
 async function checkAuth(){try{const r=await fetch('/api/auth/status',{credentials:'include'});const d=await r.json();if(d.authenticated)showApp();else showLogin();}catch{showLogin();}}
@@ -1172,12 +1437,12 @@ function nav(page){
   const ni=document.querySelector(`[data-p="${page}"]`);if(ni)ni.classList.add('active');
   document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
   const pg=document.getElementById(`page-${page}`);if(pg)pg.classList.add('active');
-  const actions={dashboard:()=>refreshServers(),servers:()=>refreshServers(),snapshots:()=>loadImages(),vertex:()=>{loadVertex();loadVertexCfg();},catalog:()=>renderCatalog(),schedule:()=>{loadScheduleCfg();updateSchedGrid();},'monitor-cfg':()=>loadMonitorCfg(),logs:()=>loadLogs(),settings:()=>loadSettings()};
+  const actions={dashboard:()=>refreshServers(),servers:()=>refreshServers(),snapshots:()=>loadImages(),vertex:()=>{loadVertex();loadVertexCfg();},catalog:()=>renderCatalog(),ips:()=>loadIPs(),products:()=>loadProducts(),schedule:()=>{loadScheduleCfg();updateSchedGrid();},'monitor-cfg':()=>loadMonitorCfg(),logs:()=>loadLogs(),settings:()=>loadSettings()};
   actions[page]?.();
 }
 async function initApp(){await loadConfig();await loadCatalog();await refreshServers();await checkMonitor();startPoll();updateSchedGrid();}
 async function loadConfig(){const{data}=await api('/config');S.config=data;S.serverTypes=data.server_types||['cx43'];return data;}
-async function loadCatalog(){const{data}=await api('/config/server-type-catalog');S.catalog=data.catalog||{};}
+async function loadCatalog(){const{data}=await api('/config/server-type-catalog');S.catalog=data.catalog||{};S.locations=data.locations||[];S.catalogUpdated=data.updated;populateLocSelects();}
 async function checkMonitor(){const{data}=await api('/monitor/status');S.monitorRunning=data.running;updateMonUI(data);updateSchedStatus(data);}
 function updateMonUI(data){const dot=document.getElementById('mon-dot'),lbl=document.getElementById('mon-label'),btn=document.getElementById('mon-btn');if(S.monitorRunning){dot.className='pulse-dot on';lbl.textContent='监控运行中';btn.textContent='⏹ 停止监控';btn.className='btn btn-danger';}else{dot.className='pulse-dot';lbl.textContent='监控未启动';btn.textContent='▶ 启动监控';btn.className='btn btn-primary';}if(data?.last_check){const d=new Date(data.last_check);document.getElementById('last-check-txt').textContent=`上次: ${d.toLocaleTimeString('zh-CN')}`;}if(data?.next_check){const d=new Date(data.next_check);const now=new Date();const diff=Math.max(0,Math.round((d-now)/1000));document.getElementById('s-next').textContent=diff>0?`${diff}s`:'即将';}}
 function updateSchedStatus(data){const el=document.getElementById('s-sched'),sub=document.getElementById('s-sched-sub'),btn=document.getElementById('sched-toggle-btn');if(!el)return;const running=data?.scheduler_running;el.textContent=running?'运行中':'已停止';if(sub)sub.textContent=running?'定时调度器运行中':'点击定时任务配置';if(btn){btn.textContent=running?'⏹ 停止调度器':'▶ 启动调度器';btn.className=running?'btn btn-danger':'btn btn-success';}const delLast=document.getElementById('del-last-run'),creLast=document.getElementById('cre-last-run');if(delLast&&data?.last_scheduled_delete){const d=new Date(data.last_scheduled_delete);delLast.textContent=`上次执行: ${d.toLocaleString('zh-CN')}`;}if(creLast&&data?.last_scheduled_create){const d=new Date(data.last_scheduled_create);creLast.textContent=`上次执行: ${d.toLocaleString('zh-CN')}`;}setToggle('tog-sched-master',S.config.scheduled_tasks_enabled);}
@@ -1187,15 +1452,15 @@ function startPoll(){if(S.pollTimer)clearInterval(S.pollTimer);S.pollTimer=setIn
 async function toggleScheduler(){const{data}=await api('/monitor/status');const running=data.scheduler_running;if(running){await api('/config','POST',{scheduled_tasks_enabled:false});S.config.scheduled_tasks_enabled=false;toast('定时调度器已停止','wrn');}else{await api('/config','POST',{scheduled_tasks_enabled:true});S.config.scheduled_tasks_enabled=true;toast('定时调度器已启动');}await loadConfig();await checkMonitor();}
 async function toggleScheduleMaster(){S.config.scheduled_tasks_enabled=!S.config.scheduled_tasks_enabled;setToggle('tog-sched-master',S.config.scheduled_tasks_enabled);await api('/config','POST',{scheduled_tasks_enabled:S.config.scheduled_tasks_enabled});await checkMonitor();toast(S.config.scheduled_tasks_enabled?'调度器已启动':'调度器已停止',S.config.scheduled_tasks_enabled?'ok':'wrn');}
 async function refreshServers(force=false){const{data}=await api('/servers'+(force?'?refresh=1':''));S.servers=data.servers||[];renderDash();renderSvList();if(data.last_check){const d=new Date(data.last_check);document.getElementById('last-check-txt').textContent=`上次: ${d.toLocaleTimeString('zh-CN')}`;}}
-function renderDash(){const sv=S.servers,thr=S.config.traffic_threshold||0.8;document.getElementById('s-total').textContent=sv.length;document.getElementById('s-run').textContent=sv.filter(s=>s.status==='running').length;const high=sv.filter(s=>s.usage_ratio>=thr);document.getElementById('s-high').textContent=high.length;document.getElementById('s-thr-lbl').textContent=`超过 ${Math.round(thr*100)}% 阈值`;const tot=sv.reduce((a,s)=>a+s.outgoing_traffic,0);document.getElementById('s-traffic').innerHTML=`${(tot/1024**3).toFixed(1)}<small>GB</small>`;const el=document.getElementById('dash-servers');if(!sv.length){el.innerHTML=emptyState('🖥','暂无服务器','当前项目下没有运行中的实例');return;}el.innerHTML=`<div class="sv-grid">${sv.map(s=>svCard(s,thr)).join('')}</div>`;}
+function renderDash(){const sv=S.servers,thr=S.config.traffic_threshold||0.8;document.getElementById('s-total').textContent=sv.length;document.getElementById('s-run').textContent=sv.filter(s=>s.status==='running').length;const high=sv.filter(s=>s.usage_ratio>=thr);document.getElementById('s-high').textContent=high.length;document.getElementById('s-thr-lbl').textContent=`超过 ${Math.round(thr*100)}% 阈值`;const tot=sv.reduce((a,s)=>a+s.outgoing_traffic,0);document.getElementById('s-traffic').innerHTML=`${(tot/1024**3).toFixed(1)}<small>GB</small>`;const costEl=document.getElementById('s-cost');if(costEl)costEl.innerHTML=`${sv.reduce((a,s)=>a+(parseFloat(s.monthly_price)||0),0).toFixed(2)}<small>€</small>`;const el=document.getElementById('dash-servers');if(!sv.length){el.innerHTML=emptyState('🖥','暂无服务器','当前项目下没有运行中的实例');return;}el.innerHTML=`<div class="sv-grid">${sv.map(s=>svCard(s,thr)).join('')}</div>`;}
 function renderSvList(){const el=document.getElementById('sv-list'),sv=S.servers,thr=S.config.traffic_threshold||0.8;if(!sv.length){el.innerHTML=emptyState('🖥','暂无服务器','点击右上角创建');return;}el.innerHTML=`<div class="sv-grid">${sv.map(s=>svCard(s,thr)).join('')}</div>`;}
-function svCard(s,thr){const r=s.usage_ratio||0,pct=s.usage_percent||0;const outG=(s.outgoing_traffic/1024**3).toFixed(2),incG=(s.included_traffic/1024**3).toFixed(2);let tc='tf-0';if(r>=0.9)tc='tf-3';else if(r>=thr)tc='tf-2';else if(r>=0.5)tc='tf-1';const pctColor=tc==='tf-3'?'var(--rose)':tc==='tf-2'?'var(--orange)':tc==='tf-1'?'var(--amber)':'var(--emerald)';const bw=Math.min(100,Math.round(r*100));const bc=s.status==='running'?'b-run':s.status==='off'?'b-off':'b-init';const ti=s.server_type_info||{};const alertBar=r>=0.9?'<div class="sv-alert"></div>':r>=thr?'<div class="sv-alert sv-alert-amber"></div>':'';return `<div class="sv-card">${alertBar}<div class="sv-card-top"><div><div class="sv-name">${s.name}</div><div class="sv-meta"><span class="badge ${bc}">● ${s.status}</span><span class="badge b-type">${s.server_type}${ti.cores?` · ${ti.cores}c/${ti.memory}G`:''}</span></div></div></div><div class="sv-ip"><span class="sv-ip-val">${s.ipv4||'—'}</span>${s.ipv4?`<button class="sv-ip-copy" onclick="copy('${s.ipv4}')" title="复制">📋</button>`:''}</div><div><div class="tbar-hd"><span class="tbar-lbl">出站流量</span><span class="tbar-pct" style="color:${pctColor}">${pct}%</span></div><div class="tbar-track"><div class="tbar-fill ${tc}" style="width:${bw}%"></div></div><div class="tbar-detail">${outG} GB / ${incG} GB included</div></div><div class="sv-foot"><div class="sv-tags"><span class="tag">${s.location||''}</span>${s.image?.type==='snapshot'?`<span class="tag tag-snap">snap:${s.image.id}</span>`:`<span class="tag">${s.image?.name||'?'}</span>`}${ti.traffic?`<span class="tag">${ti.traffic}</span>`:''}</div><div class="sv-acts"><button class="btn btn-success btn-sm" onclick="rebuildSv(${s.id},'${s.name}')">🔄</button><button class="btn btn-danger btn-sm" onclick="confirmDel(${s.id},'${s.name}')">🗑</button></div></div></div>`;}
+function svCard(s,thr){const r=s.usage_ratio||0,pct=s.usage_percent||0;const outG=(s.outgoing_traffic/1024**3).toFixed(2),incG=(s.included_traffic/1024**3).toFixed(2);let tc='tf-0';if(r>=0.9)tc='tf-3';else if(r>=thr)tc='tf-2';else if(r>=0.5)tc='tf-1';const pctColor=tc==='tf-3'?'var(--rose)':tc==='tf-2'?'var(--orange)':tc==='tf-1'?'var(--amber)':'var(--emerald)';const bw=Math.min(100,Math.round(r*100));const bc=s.status==='running'?'b-run':s.status==='off'?'b-off':'b-init';const ti=s.server_type_info||{};const alertBar=r>=0.9?'<div class="sv-alert"></div>':r>=thr?'<div class="sv-alert sv-alert-amber"></div>':'';const price=s.monthly_price?`<span class="price-tag">€${s.monthly_price}/月</span>`:'';const lock=s.ipv4_locked?'<span class="lock-badge on" title="IP 已锁定，重建时保留" style="font-size:9px;padding:3px 8px;">🔒 锁IP</span>':'';return `<div class="sv-card">${alertBar}<div class="sv-card-top"><div><div class="sv-name">${s.name} ${lock}</div><div class="sv-meta"><span class="badge ${bc}">● ${s.status}</span><span class="badge b-type">${s.server_type}${ti.cores?` · ${ti.cores}c/${ti.memory}G`:''}</span></div></div></div><div class="sv-ip"><span class="sv-ip-val">${s.ipv4||'—'}</span>${s.ipv4?`<button class="sv-ip-copy" onclick="copy('${s.ipv4}')" title="复制">📋</button>`:''}</div><div><div class="tbar-hd"><span class="tbar-lbl">出站流量</span><span class="tbar-pct" style="color:${pctColor}">${pct}%</span></div><div class="tbar-track"><div class="tbar-fill ${tc}" style="width:${bw}%"></div></div><div class="tbar-detail">${outG} GB / ${incG} GB included</div></div><div class="sv-foot"><div class="sv-tags"><span class="tag">${s.location||''}</span>${s.image?.type==='snapshot'?`<span class="tag tag-snap">snap:${s.image.id}</span>`:`<span class="tag">${s.image?.name||'?'}</span>`}${ti.traffic?`<span class="tag">${ti.traffic}</span>`:''}${price}</div><div class="sv-acts"><button class="btn btn-success btn-sm" onclick="rebuildSv(${s.id},'${s.name}')" title="重建">🔄</button><button class="btn btn-danger btn-sm" onclick="confirmDel(${s.id},'${s.name}')" title="删除">🗑</button></div></div></div>`;}
 async function confirmDel(id,name){openModal('确认删除',`<p style="color:var(--ink2);margin-bottom:18px;">确定删除 <strong style="color:var(--rose)">${name}</strong>？此操作不可撤销。</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="delSv(${id})">确认删除</button></div>`);}
 async function delSv(id){closeModal();const{ok}=await api(`/servers/${id}`,'DELETE');if(ok){toast('服务器已删除');await refreshServers(true);}else toast('删除失败','err');}
 async function rebuildSv(id,name){openModal('确认重建',`<p style="color:var(--ink2);margin-bottom:6px;">重建 <strong>${name}</strong></p><p style="font-size:12px;color:var(--ink3);margin-bottom:18px;">将按优先级创建新服务器，成功后删除旧服务器，并自动同步 Vertex IP</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="doRebuild(${id})">确认重建</button></div>`);}
 async function doRebuild(id){closeModal();toast('重建中，请稍候…','wrn');const{ok,data}=await api(`/servers/rebuild/${id}`,'POST');if(ok){toast(`重建成功！新IP: ${data.new_server?.ip}`);await refreshServers(true);}else toast(data.error||'重建失败','err');}
-function openCreateModal(){const types=S.serverTypes,cfg=S.config;openModal('创建服务器',`<div class="fg"><label class="fl">服务器名称</label><input class="inp" id="cr-name" placeholder="my-server-01"></div><div class="fg"><label class="fl">服务器型号</label><select class="inp" id="cr-type">${types.map(t=>`<option value="${t}">${t}${S.catalog[t]?` — ${S.catalog[t].cores}c/${S.catalog[t].memory}G`:''}</option>`).join('')}${Object.keys(S.catalog).filter(k=>!types.includes(k)).map(k=>`<option value="${k}">${k} — ${S.catalog[k].cores}c/${S.catalog[k].memory}G</option>`).join('')}</select></div><div class="fg"><label class="fl">镜像/快照 ID</label><input class="inp" id="cr-img" placeholder="${cfg.initial_snapshot_id||'快照ID'}"><div class="fh">留空使用默认快照 ID</div></div><div class="fg"><label class="fl">地区</label><select class="inp" id="cr-loc"><option value="nbg1">nbg1 — 德国纽伦堡</option><option value="fsn1">fsn1 — 法尔肯施泰因</option><option value="hel1">hel1 — 芬兰赫尔辛基</option><option value="ash">ash — 美国弗吉尼亚</option><option value="hil">hil — 美国希尔斯伯勒</option><option value="sin">sin — 新加坡</option></select></div><div class="info-box" style="margin-bottom:14px;font-size:11px;">✅ 创建完成后将自动同步 Vertex 下载器 IP</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="doCreate()">✓ 创建</button></div>`);}
-async function doCreate(){const name=document.getElementById('cr-name').value.trim(),server_type=document.getElementById('cr-type').value;const imgVal=document.getElementById('cr-img').value.trim()||S.config.initial_snapshot_id;const location=document.getElementById('cr-loc').value;if(!name){toast('请输入服务器名称','err');return;}if(!imgVal){toast('请输入镜像ID','err');return;}closeModal();toast('正在创建…','wrn');const{ok,data}=await api('/servers/create','POST',{name,server_type,image_id:parseInt(imgVal),location});if(ok){toast(`创建成功！IP: ${data.server.ip}`);await refreshServers(true);}else toast(data.error||'创建失败','err');}
+async function openCreateModal(){const types=S.serverTypes,cfg=S.config;if(!S.locations.length){try{const{data}=await api('/locations');S.locations=data.locations||[];}catch(e){}}const locOpts=(S.locations.length?S.locations:[{name:'nbg1',description:'德国纽伦堡'}]).map(l=>`<option value="${l.name}">${l.name} — ${l.description||''}</option>`).join('');let freeIps='<option value="">自动分配（默认）</option>';try{if(!S.primaryIPs.length){const{data}=await api('/primary-ips');S.primaryIPs=data.primary_ips||[];}freeIps+=S.primaryIPs.filter(ip=>ip.type==='ipv4'&&!ip.assignee_id).map(ip=>`<option value="${ip.id}">${ip.ip}（${ip.name||ip.id}，${ip.location}）${ip.locked?'🔒':''}</option>`).join('');}catch(e){}openModal('创建服务器',`<div class="fg"><label class="fl">服务器名称</label><input class="inp" id="cr-name" placeholder="my-server-01"></div><div class="fg"><label class="fl">服务器型号</label><select class="inp" id="cr-type">${types.map(t=>`<option value="${t}">${t}${S.catalog[t]?` — ${S.catalog[t].cores}c/${S.catalog[t].memory}G`:''}</option>`).join('')}${Object.keys(S.catalog).filter(k=>!types.includes(k)).map(k=>`<option value="${k}">${k} — ${S.catalog[k].cores}c/${S.catalog[k].memory}G</option>`).join('')}</select></div><div class="fg"><label class="fl">镜像/快照 ID</label><input class="inp" id="cr-img" placeholder="${cfg.initial_snapshot_id||'快照ID'}"><div class="fh">留空使用默认快照 ID</div></div><div class="fg"><label class="fl">地区</label><select class="inp" id="cr-loc">${locOpts}</select></div><div class="fg"><label class="fl">IPv4 来源</label><select class="inp" id="cr-pip">${freeIps}</select><div class="fh">选择已锁定的空闲 IPv4 可复用该地址</div></div><div class="tog-row"><div><div class="tog-lbl">锁定新 IP</div><div class="tog-desc">创建后关闭自动删除 + 开启保护，重建时保留 IP</div></div><div class="tog-sw on" id="cr-lock" onclick="this.classList.toggle('on')"></div></div><div class="info-box" style="margin-bottom:14px;font-size:11px;">✅ 创建完成后将自动同步 Vertex 下载器 IP</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="doCreate()">✓ 创建</button></div>`);}
+async function doCreate(){const name=document.getElementById('cr-name').value.trim(),server_type=document.getElementById('cr-type').value;const imgVal=document.getElementById('cr-img').value.trim()||S.config.initial_snapshot_id;const location=document.getElementById('cr-loc').value;const pipRaw=document.getElementById('cr-pip')?.value;const pip=pipRaw?parseInt(pipRaw):null;const lock=document.getElementById('cr-lock')?.classList.contains('on')||false;if(!name){toast('请输入服务器名称','err');return;}if(!imgVal){toast('请输入镜像ID','err');return;}closeModal();toast('正在创建…','wrn');const{ok,data}=await api('/servers/create','POST',{name,server_type,image_id:parseInt(imgVal),location,primary_ipv4_id:pip,lock_ip:lock});if(ok){toast(`创建成功！IP: ${data.server.ip}${lock?'（已锁定）':''}`);await refreshServers(true);}else toast(data.error||'创建失败','err');}
 async function loadImages(){const type=document.getElementById('img-type')?.value||'snapshot';document.getElementById('snap-list').innerHTML='<div class="loading"><div class="spin"></div></div>';const{data}=await api(`/images?type=${type}`);const imgs=data.images||[];if(!imgs.length){document.getElementById('snap-list').innerHTML=emptyState('💾','暂无镜像');return;}const fmtDate=d=>d?new Date(d).toLocaleDateString('zh-CN'):'—';const fmtGB=n=>n?`${n.toFixed(1)}GB`:'—';document.getElementById('snap-list').innerHTML=`<div class="snap-grid">${imgs.map(img=>`<div class="snap-card"><div style="display:flex;align-items:center;justify-content:space-between;"><div class="snap-name">${img.name||img.description||'未命名'}</div><span class="snap-id">${img.id}</span></div><div class="snap-meta"><span>💿 ${fmtGB(img.disk_size)}</span><span>📦 ${fmtGB(img.image_size)}</span><span>🕐 ${fmtDate(img.created)}</span></div>${img.os_flavor?`<div style="font-size:11px;color:var(--ink3);">${img.os_flavor} ${img.os_version||''}</div>`:''}<div class="snap-acts"><button class="btn btn-xs btn-base" onclick="copy('${img.id}')">📋 复制ID</button><button class="btn btn-xs btn-primary" onclick="useSnap(${img.id})">＋ 用此创建</button></div></div>`).join('')}</div>`;}
 function useSnap(id){nav('servers');setTimeout(()=>{openCreateModal();setTimeout(()=>{document.getElementById('cr-img').value=id;},60);},100);}
 async function loadVertexCfg(){const cfg=S.config;document.getElementById('vcfg-url').value=cfg.vertex_api_url||'';document.getElementById('vcfg-kw').value=cfg.vertex_downloader_keyword||'Hetzner';setToggle('tog-vertex-sync',cfg.vertex_sync_enabled);const status=document.getElementById('vertex-conn-status');if(cfg.vertex_api_url){status.innerHTML=`<span style="font-size:12px;color:var(--ink3);">地址: <span style="color:var(--blue);font-family:var(--mono);">${cfg.vertex_api_url}</span></span>${cfg.vertex_cookies_set?'<span style="font-size:11px;background:#d1fae5;color:#047857;padding:2px 8px;border-radius:6px;margin-left:8px;">Cookie 已设置</span>':'<span style="font-size:11px;background:#fee2e2;color:var(--rose);padding:2px 8px;border-radius:6px;margin-left:8px;">Cookie 未设置</span>'}`; }}
@@ -1203,7 +1468,9 @@ async function saveVertexCfg(){const url=document.getElementById('vcfg-url').val
 async function vertexTest(){const{ok,data}=await api('/vertex/test','POST');const status=document.getElementById('vertex-conn-status');if(ok&&data.success){toast(data.message);status.innerHTML=`<span style="font-size:12px;color:var(--emerald);">✅ ${data.message}</span>`;}else{toast(data.message||data.error||'连接失败','err');status.innerHTML=`<span style="font-size:12px;color:var(--rose);">❌ ${data.message||data.error}</span>`;}}
 async function loadVertex(){document.getElementById('dl-list').innerHTML='<div class="loading"><div class="spin"></div></div>';const{ok,data}=await api('/vertex/downloaders');if(!ok){document.getElementById('dl-list').innerHTML=`<div style="color:var(--rose);font-size:13px;padding:20px;">${data.error||'加载失败，请检查 Vertex 配置'}</div>`;document.getElementById('dl-count-txt').textContent='';return;}const dls=data.downloaders||[];document.getElementById('dl-count-txt').textContent=`共 ${dls.length} 个，${dls.filter(d=>d._is_hetzner).length} 个 Hetzner`;if(!dls.length){document.getElementById('dl-list').innerHTML=emptyState('🔌','暂无下载器');return;}document.getElementById('dl-list').innerHTML=`<div class="dl-list-wrap">${dls.map(dl=>`<div class="dl-card ${dl._is_hetzner?'h-card':''}"><div class="dl-indicator ${dl.status==='active'?'live':''}"></div><div class="dl-info"><div class="dl-alias">${dl.alias||'未命名'} ${dl._is_hetzner?'<span class="dl-h-badge">Hetzner</span>':''}</div><div class="dl-url">${dl.clientUrl||dl.url||'—'}</div></div>${dl._current_ip?`<div class="dl-ip-tag">${dl._current_ip}</div>`:''}</div>`).join('')}</div>`;}
 async function vertexSyncNow(){toast('正在从 Hetzner API 拉取最新 IP 并同步…','wrn');const{ok,data}=await api('/vertex/sync','POST',{});if(ok){toast(`同步完成: 更新 ${data.result.updated} / 保持 ${data.result.kept} / 失败 ${data.result.failed}`);document.getElementById('vertex-last-sync').textContent=`上次同步: ${new Date().toLocaleTimeString('zh-CN')} — 更新 ${data.result.updated} 个，使用IP: ${(data.ips_used||[]).join(', ')}`;await loadVertex();}else toast(data.error||'同步失败','err');}
-function renderCatalog(){const filter=document.getElementById('cat-filter')?.value||'';const catalog=S.catalog;const types=Object.entries(catalog).filter(([k,v])=>!filter||v.series===filter);document.getElementById('cat-current-types').textContent=(S.serverTypes||[]).join(' → ');if(!types.length){document.getElementById('catalog-grid').innerHTML=emptyState('📋','暂无数据');return;}document.getElementById('catalog-grid').innerHTML=types.map(([name,info])=>{const sel=(S.serverTypes||[]).includes(name);const sc=info.series==='CX'?'background:rgba(67,97,238,.12);color:var(--blue)':info.series==='CPX'?'background:rgba(14,165,233,.12);color:var(--cyan)':'background:rgba(124,58,237,.12);color:var(--violet)';return `<div class="ct-card ${sel?'sel':''}" onclick="toggleCatalogType('${name}')"><div class="ct-name"><span class="ct-series" style="${sc}">${info.series}</span>${name}${info.arch==='arm64'?` <span style="font-size:9px;color:var(--violet);background:rgba(124,58,237,.1);padding:1px 6px;border-radius:4px;">ARM64</span>`:''}</div><div class="ct-specs"><span class="ct-spec">🔲 ${info.cores} vCPU</span><span class="ct-spec">💾 ${info.memory}GB</span><span class="ct-spec">💿 ${info.disk}GB</span></div><div class="ct-traffic">🌐 ${info.traffic}</div>${sel?'<div class="ct-check">✓ 已在优先级列表</div>':'<div style="font-size:10px;color:var(--ink4);margin-top:6px;">点击添加</div>'}</div>`;}).join('');}
+function populateLocSelects(){const sel=document.getElementById('cat-price-loc');if(!sel)return;const locs=(S.locations&&S.locations.length)?S.locations:[{name:S.config.default_location||'nbg1',description:'默认'}];const cur=sel.value;sel.innerHTML=locs.map(l=>`<option value="${l.name}">${l.name} — ${l.description||''}</option>`).join('');sel.value=[...locs].some(l=>l.name===cur)?cur:(S.config.default_location||'nbg1');}
+function refreshCatalogApi(){toast('正在从 API 刷新型号目录…','wrn');api('/primary-ips/refresh-catalog','POST').then(()=>loadCatalog()).then(()=>{renderCatalog();toast('目录已刷新');}).catch(()=>toast('刷新失败','err'));}
+function renderCatalog(){const filter=document.getElementById('cat-filter')?.value||'';const catalog=S.catalog;const locSel=document.getElementById('cat-price-loc');if(locSel&&!locSel.options.length)populateLocSelects();const loc=locSel?.value||S.config.default_location||'nbg1';const types=Object.entries(catalog).filter(([k,v])=>!filter||v.series===filter);document.getElementById('cat-current-types').textContent=(S.serverTypes||[]).join(' → ');const upd=document.getElementById('cat-updated');if(upd){upd.textContent=S.catalogUpdated?`数据源：Hetzner API · 更新于 ${new Date(S.catalogUpdated).toLocaleTimeString('zh-CN')}`:'内置目录（API 拉取中…）';}if(!types.length){document.getElementById('catalog-grid').innerHTML=emptyState('📋','暂无数据');return;}document.getElementById('catalog-grid').innerHTML=types.map(([name,info])=>{const sel=(S.serverTypes||[]).includes(name);const sc=info.series==='CX'?'background:rgba(67,97,238,.12);color:var(--blue)':info.series==='CPX'?'background:rgba(14,165,233,.12);color:var(--cyan)':info.series==='CCX'?'background:rgba(245,158,11,.14);color:#92400e':'background:rgba(124,58,237,.12);color:var(--violet)';const price=(info.prices||{})[loc]||{};const locInfo=(info.locations||{})[loc]||{};const avail=info.deprecated?'dep':locInfo.available===false?'no':'yes';const availTxt=info.deprecated?'已弃用':locInfo.available===false?'无货':'有货';const mono=price.monthly_net?`€${price.monthly_net}`:'—';const hourly=price.hourly_net?`€${price.hourly_net}/h`:'';const catTxt=info.category==='cost_optimized'?'共享':info.category==='regular_purpose'?'标准':info.category==='general_purpose'?'通用':(info.cpu_type||'');return `<div class="ct-card ${sel?'sel':''}" onclick="toggleCatalogType('${name}')"><div class="ct-name"><span class="ct-series" style="${sc}">${info.series}</span>${name}${info.arch&&String(info.arch).includes('arm')?` <span style="font-size:9px;color:var(--violet);background:rgba(124,58,237,.1);padding:1px 6px;border-radius:4px;">ARM</span>`:''}</div><div class="ct-specs"><span class="ct-spec">🔲 ${info.cores} vCPU</span><span class="ct-spec">💾 ${info.memory}GB</span><span class="ct-spec">💿 ${info.disk}GB</span>${info.cpu_type?`<span class="ct-spec">⚙ ${catTxt}</span>`:''}</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;"><span class="ct-traffic">🌐 ${info.traffic||'—'}</span><span class="avail ${avail}">${availTxt}</span></div><div style="display:flex;align-items:center;gap:6px;margin-top:7px;"><span class="price-tag">${mono}<small>/月</small></span>${hourly?`<span class="price-tag" style="background:rgba(14,165,233,.09);color:var(--cyan);">${hourly}</span>`:''}</div>${sel?'<div class="ct-check">✓ 已在优先级列表</div>':'<div style="font-size:10px;color:var(--ink4);margin-top:6px;">点击添加</div>'}</div>`;}).join('');}
 function toggleCatalogType(name){if(!S.serverTypes)S.serverTypes=[];if(!S.serverTypes.includes(name)){S.serverTypes.push(name);toast(`已添加 ${name}`);}else{S.serverTypes=S.serverTypes.filter(t=>t!==name);toast(`已移除 ${name}`,'wrn');}renderCatalog();renderTypeChips();api('/config','POST',{server_types:S.serverTypes});}
 function loadScheduleCfg(){const c=S.config,g=id=>document.getElementById(id);g('cfg-del-h').value=c.schedule_delete_hour??23;g('cfg-del-m').value=String(c.schedule_delete_minute??0).padStart(2,'0');g('cfg-cre-h').value=c.schedule_create_hour??8;g('cfg-cre-m').value=String(c.schedule_create_minute??0).padStart(2,'0');g('cfg-cre-count').value=c.schedule_create_count??3;g('cfg-cre-prefix').value=c.schedule_server_name_prefix??'hetzner-auto';const tzEl=g('cfg-tz');if(tzEl){const saved=c.schedule_timezone||'Asia/Shanghai';if(![...tzEl.options].some(o=>o.value===saved))tzEl.add(new Option(saved,saved));tzEl.value=saved;}setToggle('tog-sched-master',c.scheduled_tasks_enabled);setToggle('tog-del',c.schedule_delete_enabled);setToggle('tog-cre',c.schedule_create_enabled);const srvEl=document.getElementById('srv-localtime');if(srvEl)srvEl.textContent=new Date().toLocaleString('zh-CN');updateTimeline();}
 function pad2(n){return String(parseInt(n)||0).padStart(2,'0');}
@@ -1227,6 +1494,30 @@ async function testApi(){const{ok,data}=await api('/servers?refresh=1');if(ok)to
 async function saveTgCfg(){const t=document.getElementById('s-tgt').value.trim(),c=document.getElementById('s-tgc').value.trim();const body={};if(t)body.telegram_bot_token=t;if(c)body.telegram_chat_id=c;const{ok}=await api('/config','POST',body);if(ok)toast('Telegram 配置已保存');else toast('保存失败','err');}
 async function testTg(){const{ok}=await api('/telegram/test','POST');if(ok)toast('测试消息已发送！');else toast('发送失败','err');}
 async function savePwd(){const pwd=document.getElementById('s-pwd').value;if(!pwd){toast('请输入新密码','wrn');return;}const{ok}=await api('/config','POST',{web_password:pwd});if(ok){toast('密码已更新，请重新登录');setTimeout(doLogout,1600);}else toast('更新失败','err');}
+/* ─── IP 管理 ─── */
+async function loadIPs(){const list=document.getElementById('ip-list');list.innerHTML='<div class="loading"><div class="spin"></div></div>';const{ok,data}=await api('/primary-ips');if(!ok){list.innerHTML=`<div style="color:var(--rose);font-size:13px;padding:20px;">${data.error||'加载失败'}</div>`;return;}S.primaryIPs=data.primary_ips||[];S.ipSelected.clear();document.getElementById('ip-select-all').checked=false;updateBatchBar();renderIPs();}
+function renderIPs(){const list=document.getElementById('ip-list');const ips=S.primaryIPs;if(!ips.length){list.innerHTML=emptyState('🌐','暂无 Primary IP','点击右上角「批量创建」新建 IPv4 / IPv6');return;}list.innerHTML=`<div class="ip-table">${ips.map(ip=>ipRow(ip)).join('')}</div>`;}
+function ipRow(ip){const sel=S.ipSelected.has(ip.id);const locked=ip.locked;const used=ip.assignee_id?`<span class="ip-assignee used">🔗 ${ip.assignee_name||('服务器#'+ip.assignee_id)}</span>`:'<span class="ip-assignee free">空闲</span>';const typeCls=ip.type==='ipv4'?'v4':'v6';const lockBtn=`<span class="lock-badge ${locked?'on':''}" onclick="toggleIPLock(${ip.id},${!locked})">${locked?'🔒 已锁定':'🔓 未锁定'}</span>`;const acts=`<div class="ip-right">${used}<span class="ip-type ${typeCls}">${ip.type.toUpperCase()}</span>${lockBtn}${ip.assignee_id?`<button class="btn btn-warn btn-xs" onclick="unassignIP(${ip.id})">解绑</button>`:`<button class="btn btn-success btn-xs" onclick="assignIPModal(${ip.id})">分配</button>`}<button class="btn btn-danger btn-xs" onclick="delIP(${ip.id},'${ip.ip||''}')">删除</button></div>`;return `<div class="ip-row ${locked?'locked':''}"><div class="ip-check"><input type="checkbox" ${sel?'checked':''} onchange="toggleIPSelect(${ip.id},this.checked)"></div><div class="ip-main"><div class="ip-name"><span class="ip-addr">${ip.ip||'—'}</span>${ip.name||('IP#'+ip.id)}</div><div class="ip-sub"><span>🆔 ${ip.id}</span><span>📍 ${ip.location||'—'}</span><span>⏱ ${ip.created?new Date(ip.created).toLocaleString('zh-CN'):'—'}</span>${ip.auto_delete?'<span style="color:var(--amber);">自动删除</span>':''}${ip.delete_protection?'<span style="color:var(--violet);">删除保护</span>':''}</div></div>${acts}</div>`;}
+function toggleIPSelect(id,chk){if(chk)S.ipSelected.add(id);else S.ipSelected.delete(id);updateBatchBar();}
+function onSelectAllChange(){const cb=document.getElementById('ip-select-all');S.ipSelected.clear();if(cb.checked)S.primaryIPs.forEach(ip=>S.ipSelected.add(ip.id));renderIPs();updateBatchBar();}
+function clearIPSelection(){S.ipSelected.clear();document.getElementById('ip-select-all').checked=false;renderIPs();updateBatchBar();}
+function updateBatchBar(){const bar=document.getElementById('batch-bar');if(!bar)return;const n=S.ipSelected.size;bar.style.display=n?'flex':'none';document.getElementById('batch-count').textContent=n;}
+function openIPCreate(){const locs=(S.locations&&S.locations.length)?S.locations:[{name:S.config.default_location||'nbg1',description:'默认'}];const locOpts=locs.map(l=>`<option value="${l.name}">${l.name} — ${l.description||''}</option>`).join('');openModal('批量创建 IP',`<div class="fg"><label class="fl">创建数量</label><input class="inp" id="ipc-count" type="number" min="1" max="50" value="5"></div><div class="fg"><label class="fl">名称前缀</label><input class="inp" id="ipc-prefix" placeholder="ip-nbg1"><div class="fh">生成：前缀-01、前缀-02 …</div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"><div class="fg"><label class="fl">类型</label><select class="inp" id="ipc-type"><option value="ipv4">IPv4</option><option value="ipv6">IPv6</option></select></div><div class="fg"><label class="fl">地区</label><select class="inp" id="ipc-loc">${locOpts}</select></div></div><div class="tog-row"><div><div class="tog-lbl">创建后锁定</div><div class="tog-desc">关闭自动删除 + 开启删除保护（推荐）</div></div><div class="tog-sw on" id="ipc-lock" onclick="this.classList.toggle('on')"></div></div><div class="info-box" style="margin-bottom:12px;font-size:11px;">🛡 Primary IP 按小时计费；锁定后不会被误删，并可在创建/重建服务器时复用该地址。</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="doIPCreate()">✓ 开始创建</button></div>`);}
+async function doIPCreate(){const count=parseInt(document.getElementById('ipc-count').value)||1;const prefix=document.getElementById('ipc-prefix').value.trim();const type=document.getElementById('ipc-type').value;const location=document.getElementById('ipc-loc').value;const lock=document.getElementById('ipc-lock').classList.contains('on');if(!prefix){toast('请输入名称前缀','err');return;}closeModal();toast(`正在创建 ${count} 个 ${type}…`,'wrn');const{ok,data}=await api('/primary-ips/create','POST',{count,type,name_prefix:prefix,location,lock});if(!ok){toast(data.error||'创建失败','err');return;}openModal('批量创建结果',`<p style="font-size:13px;color:var(--ink2);margin-bottom:8px;">共 ${count} 个：✅ 成功 ${data.created} / ❌ 失败 ${data.failed}</p><div class="res-list">${(data.results||[]).map(r=>`<div class="res-row ${r.ok?'ok':'fail'}">${r.ok?'✅':'❌'} ${r.name} → ${r.ok?r.ip:(r.error||'失败')}</div>`).join('')}</div><div style="display:flex;justify-content:flex-end;margin-top:16px;"><button class="btn btn-base" onclick="closeModal();loadIPs();">确定</button></div>`);await loadIPs();}
+async function batchDeleteIPs(){const ids=[...S.ipSelected];if(!ids.length)return;openModal('确认批量删除',`<p style="color:var(--ink2);margin-bottom:8px;">确定删除 <strong style="color:var(--rose)">${ids.length}</strong> 个 IP？</p><p style="font-size:12px;color:var(--ink3);margin-bottom:12px;">已锁定的 IP 会先自动解锁再删除。</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="doBatchDeleteIPs()">确认删除</button></div>`);}
+async function doBatchDeleteIPs(){closeModal();const ids=[...S.ipSelected];const{ok,data}=await api('/primary-ips/delete','POST',{ids,force:true});if(ok){openModal('删除结果',`<p style="font-size:13px;color:var(--ink2);margin-bottom:8px;">✅ 成功 ${data.deleted} / ❌ 失败 ${data.failed}</p><div class="res-list">${(data.results||[]).map(r=>`<div class="res-row ${r.ok?'ok':'fail'}">${r.ok?'✅':'❌'} IP#${r.id} ${r.ok?'已删除':(r.message||'')}</div>`).join('')}</div><div style="display:flex;justify-content:flex-end;margin-top:16px;"><button class="btn btn-base" onclick="closeModal();loadIPs();">确定</button></div>`);await loadIPs();}else toast(data.error||'删除失败','err');}
+async function delIP(id,ip){openModal('确认删除',`<p style="color:var(--ink2);margin-bottom:18px;">确定删除 <strong style="color:var(--rose)">${ip||('IP#'+id)}</strong>？</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="doDelIP(${id})">确认删除</button></div>`);}
+async function doDelIP(id){closeModal();const{ok,data}=await api('/primary-ips/delete','POST',{ids:[id],force:true});if(ok&&data.deleted){toast('IP 已删除');await loadIPs();}else toast((data.results&&data.results[0]&&data.results[0].message)||'删除失败','err');}
+async function toggleIPLock(id,locked){const{ok,data}=await api(`/primary-ips/${id}/lock`,'POST',{locked});if(ok){toast(data.message);await loadIPs();}else toast(data.error||'操作失败','err');}
+async function batchLockIPs(locked){const ids=[...S.ipSelected];if(!ids.length)return;let okc=0,fc=0;for(const id of ids){const{ok}=await api(`/primary-ips/${id}/lock`,'POST',{locked});ok?okc++:fc++;}toast((locked?`已锁定 ${okc} 个`:`已解锁 ${okc} 个`)+(fc?`，失败 ${fc}`:''),okc?'ok':'err');await loadIPs();}
+async function assignIPModal(id){if(!S.servers.length){const{data}=await api('/servers?refresh=1');S.servers=data.servers||[];}const opts=S.servers.map(s=>`<option value="${s.id}">${s.name}（${s.ipv4||'无IP'}）${s.status==='running'?'⚠运行中':''}</option>`).join('');openModal('分配 IP',`<p style="font-size:12px;color:var(--ink3);margin-bottom:12px;">⚠️ 目标服务器需处于关机状态；地区需与 IP 一致。</p><div class="fg"><label class="fl">选择服务器</label><select class="inp" id="as-srv">${opts||'<option value="">无服务器</option>'}</select></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;"><button class="btn btn-base" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="doAssignIP(${id})">分配</button></div>`);}
+async function doAssignIP(id){const sid=parseInt(document.getElementById('as-srv').value);if(!sid){toast('请选择服务器','err');return;}closeModal();const{ok,data}=await api(`/primary-ips/${id}/assign`,'POST',{server_id:sid});if(ok){toast('分配成功');await loadIPs();}else toast(data.error||'分配失败','err');}
+async function unassignIP(id){const{ok,data}=await api(`/primary-ips/${id}/unassign`,'POST');if(ok){toast('已解绑');await loadIPs();}else toast(data.error||'解绑失败（服务器需关机）','err');}
+
+/* ─── 产品总览 ─── */
+async function loadProducts(){document.getElementById('prod-grid').innerHTML='<div class="loading"><div class="spin"></div></div>';const{ok,data}=await api('/products');if(!ok){document.getElementById('prod-grid').innerHTML=`<div style="color:var(--rose);font-size:13px;padding:20px;">${data.error||'加载失败'}</div>`;return;}S.products=data;const c=data.counts||{};const stats=[['🖥','服务器',c.servers,'sc-blue'],['🌐','Primary IP',c.primary_ips,'sc-violet'],['💨','Floating IP',c.floating_ips,'sc-cyan'],['💿','Volumes',c.volumes,'sc-emerald'],['⚖️','负载均衡',c.load_balancers,'sc-amber'],['🧱','防火墙',c.firewalls,'sc-rose'],['💾','快照',c.snapshots,'sc-green'],['🔑','SSH 密钥',c.ssh_keys,'sc-violet']];document.getElementById('prod-stats').innerHTML=stats.map(([ic,lb,val,cls])=>`<div class="sc ${cls}"><div class="sc-label">${lb}</div><div class="sc-val">${val||0}</div><div class="sc-foot">${lb} 数量</div><div class="sc-icon">${ic}</div></div>`).join('');document.getElementById('prod-grid').innerHTML=`${prodCard('🖥','服务器',data.servers||[],s=>`<span class="mono">${s.name}</span> ${s.ipv4||''} ${s.server_type||''} <span class="mut">${s.status} · ${s.location||''}</span>`)}${prodCard('🌐','Primary IP',data.primary_ips||[],ip=>`<span class="mono">${ip.ip||''}</span> ${ip.name||''} <span class="mut">${ip.type} · ${ip.location||''}${ip.locked?' · 🔒':''}${ip.assignee_id?' · 已分配':' · 空闲'}</span>`)}${prodCard('💨','Floating IP',data.floating_ips||[],f=>`<span class="mono">${f.ip||''}</span> ${f.name||''} <span class="mut">${f.type} · ${f.location||''}${f.server?' · 已分配':' · 未分配'}</span>`)}${prodCard('💿','Volumes',data.volumes||[],v=>`<span class="mono">${v.name}</span> ${v.size||0}GB <span class="mut">${v.location||''}${v.server?' · 已挂载':' · 未挂载'}</span>`)}${prodCard('⚖️','负载均衡',data.load_balancers||[],lb=>`<span class="mono">${lb.name}</span> ${lb.ipv4||''} <span class="mut">${lb.type||''} · ${lb.location||''}</span>`)}${prodCard('🧱','防火墙',data.firewalls||[],fw=>`<span class="mono">${fw.name}</span> <span class="mut">${fw.rules||0} 条规则</span>`)}${prodCard('💾','快照',data.snapshots||[],sn=>`<span class="mono">${sn.name||sn.id}</span> <span class="mut">${sn.disk_size?sn.disk_size+'GB':''}</span>`)}${prodCard('🔑','SSH 密钥',data.ssh_keys||[],k=>`<span class="mono">${k.name}</span> <span class="mut">#${k.id}</span>`)}`;}
+function prodCard(icon,title,items,fmt){const body=items&&items.length?`<div class="prod-list">${items.slice(0,30).map(fmt).map(x=>`<div class="prod-item">${x}</div>`).join('')}</div>`:`<div class="prod-empty">暂无${title}</div>`;return `<div class="prod-card"><div class="prod-hd"><div class="prod-ic" style="background:linear-gradient(135deg,rgba(67,97,238,.12),rgba(115,139,255,.08));">${icon}</div><div class="prod-title">${title}</div><div class="prod-count">${items?items.length:0}</div></div>${body}</div>`;}
+
 function setToggle(id,val){const el=document.getElementById(id);if(el)el.className='tog-sw'+(val?' on':'');}
 function toggleField(field,toggleId){S.config[field]=!S.config[field];setToggle(toggleId,S.config[field]);}
 function toggleSchedField(field,toggleId,callback){S.config[field]=!S.config[field];setToggle(toggleId,S.config[field]);if(callback)callback();}
@@ -1237,6 +1528,453 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function emptyState(icon,title,sub=''){return `<div class="empty"><div class="empty-icon">${icon}</div><h3>${title}</h3>${sub?`<p>${sub}</p>`:''}</div>`;}
 checkAuth().then(()=>{if(document.getElementById('app').classList.contains('show'))initApp();});
 setInterval(()=>{if(document.getElementById('page-logs').classList.contains('active'))loadLogs();checkMonitor();},30000);
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   OVERRIDE 层：定时任务重构 / 批量创建 / 型号优先级排序 / Vertex 账号密码
+   这些同名函数声明在旧实现之后，会自动覆盖旧版本（function 声明提升）。
+   ═══════════════════════════════════════════════════════════════════════ */
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function fmtTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('zh-CN'); }catch(e){ return '—'; } }
+
+/* ─── 型号重建优先级：拖动 + 上下移（不再需要叉掉重加）────────────── */
+var _typeDragIdx = -1;
+function renderTypeChips(types){
+  if(types) S.serverTypes = types;
+  var box = document.getElementById('types-chips');
+  if(!box) return;
+  var arr = S.serverTypes || [];
+  var html = arr.map(function(t,i){
+    var info = S.catalog[t];
+    return '<div class="chip chip-pri" draggable="true" data-idx="'+i+'" '
+      + 'ondragstart="onTypeDragStart(event)" ondragover="onTypeDragOver(event)" '
+      + 'ondrop="onTypeDrop(event)" ondragend="onTypeDragEnd(event)">'
+      + '<span class="chip-pri-num">'+(i+1)+'</span>'+escHtml(t)
+      + (info? ' <small style="color:var(--ink3)">'+info.cores+'c</small>' : '')
+      + '<span class="chip-mv" onclick="moveType('+i+',-1)" title="上移">↑</span>'
+      + '<span class="chip-mv" onclick="moveType('+i+',1)" title="下移">↓</span>'
+      + '<span class="chip-x" onclick="removeType('+i+')">×</span></div>';
+  }).join('');
+  html += '<div class="chip" style="border-style:dashed;cursor:pointer;background:transparent;color:var(--ink3);" onclick="nav(\'catalog\')">+ 查看型号</div>';
+  box.innerHTML = html;
+}
+function persistTypes(){ api('/config','POST',{server_types:S.serverTypes}).catch(function(){}); }
+function moveType(i,dir){
+  var a = S.serverTypes || []; var j = i + dir;
+  if(j < 0 || j >= a.length) return;
+  var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  renderTypeChips(); persistTypes();
+}
+function onTypeDragStart(e){ _typeDragIdx = parseInt(e.currentTarget.getAttribute('data-idx')); e.currentTarget.classList.add('dragging'); }
+function onTypeDragOver(e){ e.preventDefault(); }
+function onTypeDrop(e){
+  e.preventDefault();
+  var to = parseInt(e.currentTarget.getAttribute('data-idx'));
+  var a = S.serverTypes || [];
+  if(_typeDragIdx < 0 || to < 0 || _typeDragIdx >= a.length) return;
+  var moved = a.splice(_typeDragIdx,1)[0];
+  a.splice(to,0,moved);
+  _typeDragIdx = -1;
+  renderTypeChips(); persistTypes();
+}
+function onTypeDragEnd(e){ e.currentTarget.classList.remove('dragging'); _typeDragIdx = -1; }
+function addType(){
+  var el = document.getElementById('type-inp');
+  var v = (el && el.value || '').trim().toLowerCase();
+  if(!v) return;
+  if(!S.serverTypes) S.serverTypes = [];
+  if(S.serverTypes.indexOf(v) < 0) S.serverTypes.push(v);
+  el.value = '';
+  renderTypeChips(); persistTypes();
+}
+function removeType(i){
+  if(!S.serverTypes) return;
+  S.serverTypes.splice(i,1);
+  renderTypeChips(); persistTypes();
+}
+
+/* ─── Vertex：账号 / 密码 / Cookie ─────────────────────────────────── */
+function loadVertexCfg(){
+  var cfg = S.config || {};
+  var set = function(id,val){ var e = document.getElementById(id); if(e) e.value = val; };
+  set('vcfg-url', cfg.vertex_api_url||'');
+  set('vcfg-kw', cfg.vertex_downloader_keyword||'Hetzner');
+  set('vcfg-user', cfg.vertex_username||'');
+  set('vcfg-pass','');
+  set('vcfg-interval', cfg.vertex_cookie_check_interval||300);
+  set('vcfg-cookies','');
+  setToggle('tog-vertex-sync', cfg.vertex_sync_enabled);
+  var status = document.getElementById('vertex-conn-status');
+  if(status){
+    var h = '';
+    if(cfg.vertex_api_url) h += '<span style="font-size:12px;color:var(--ink3);">地址: <span style="color:var(--blue);font-family:var(--mono);">'+escHtml(cfg.vertex_api_url)+'</span></span>';
+    h += cfg.vertex_cookies_set
+      ? '<span style="font-size:11px;background:#ecfdf5;color:#047857;padding:2px 8px;border-radius:6px;">Cookie 已设置</span>'
+      : '<span style="font-size:11px;background:#fef2f2;color:var(--rose);padding:2px 8px;border-radius:6px;">Cookie 未设置</span>';
+    if(cfg.vertex_username) h += '<span style="font-size:11px;background:#eff6ff;color:var(--blue);padding:2px 8px;border-radius:6px;">账号: '+escHtml(cfg.vertex_username)+'</span>';
+    if(cfg.vertex_password_md5) h += '<span style="font-size:11px;background:#f5f3ff;color:var(--violet);padding:2px 8px;border-radius:6px;">密码已保存</span>';
+    status.innerHTML = h;
+  }
+}
+function saveVertexCfg(){
+  var body = {
+    vertex_api_url: (document.getElementById('vcfg-url').value||'').trim(),
+    vertex_downloader_keyword: (document.getElementById('vcfg-kw').value||'').trim(),
+    vertex_username: (document.getElementById('vcfg-user').value||'').trim(),
+    vertex_cookie_check_interval: parseInt(document.getElementById('vcfg-interval').value)||300
+  };
+  var pass = (document.getElementById('vcfg-pass').value||'').trim();
+  if(pass) body.vertex_password = pass;
+  var cookies = (document.getElementById('vcfg-cookies').value||'').trim();
+  if(cookies) body.vertex_cookies = cookies;
+  api('/config','POST',body).then(function(r){
+    if(r.ok){ toast('Vertex 配置已保存'); loadConfig().then(loadVertexCfg); }
+    else toast('保存失败','err');
+  });
+}
+function refreshVertexCookie(){
+  toast('正在登录刷新 Cookie…','wrn');
+  api('/vertex/refresh-cookie','POST',{}).then(function(r){
+    if(r.ok){ toast('Cookie 刷新成功'); loadConfig().then(loadVertexCfg); }
+    else toast(r.data.error||'刷新失败','err');
+  });
+}
+
+/* ─── 创建服务器：数量 / 型号 / 分配方式 / 更多选项 ──────────────── */
+async function openCreateModal(){
+  var cfg = S.config || {}, types = S.serverTypes || [];
+  if(!S.locations.length){ try{ var lr = await api('/locations'); S.locations = lr.data.locations||[]; }catch(e){} }
+  try{ if(!S.primaryIPs.length){ var ir = await api('/primary-ips'); S.primaryIPs = ir.data.primary_ips||[]; } }catch(e){}
+  var locs = (S.locations && S.locations.length) ? S.locations : [{name:cfg.default_location||'nbg1',description:'默认'}];
+  var locOpts = locs.map(function(l){ return '<option value="'+l.name+'">'+l.name+' — '+escHtml(l.description||'')+'</option>'; }).join('');
+  var typeOpts = '<option value="">按监控配置的优先级</option>'
+    + types.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('')
+    + Object.keys(S.catalog).filter(function(k){ return types.indexOf(k)<0; })
+        .map(function(k){ return '<option value="'+k+'">'+k+'</option>'; }).join('');
+  var freeLocked = (S.primaryIPs||[]).filter(function(ip){ return ip.type==='ipv4' && !ip.assignee_id && ip.locked; });
+  var freeAll = (S.primaryIPs||[]).filter(function(ip){ return ip.type==='ipv4' && !ip.assignee_id; });
+  var ipOpts = freeAll.map(function(ip){ return '<option value="'+ip.id+'">'+ip.ip+' ('+escHtml(ip.name||ip.id)+')'+(ip.locked?' 🔒':'')+'</option>'; }).join('');
+  var sshVal = (cfg.ssh_keys||[]).join(', ');
+  var prioText = types.length ? types.join(' → ') : '（未配置，将使用默认型号）';
+  var lockedSel = freeLocked.length ? ' selected' : '';
+  var html = ''
+   + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+   +   '<div class="fg"><label class="fl">创建数量</label><input class="inp" id="cr-count" type="number" min="1" max="20" value="1"></div>'
+   +   '<div class="fg"><label class="fl">名称 / 前缀</label><input class="inp" id="cr-name" placeholder="my-server"><div class="fh">多台时生成 前缀-01、前缀-02…</div></div>'
+   + '</div>'
+   + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+   +   '<div class="fg"><label class="fl">指定型号（可选）</label><select class="inp" id="cr-type">'+typeOpts+'</select><div class="fh">留空按优先级：'+escHtml(prioText)+'</div></div>'
+   +   '<div class="fg"><label class="fl">地区</label><select class="inp" id="cr-loc">'+locOpts+'</select></div>'
+   + '</div>'
+   + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+   +   '<div class="fg"><label class="fl">镜像/快照 ID</label><input class="inp" id="cr-img" placeholder="'+(cfg.initial_snapshot_id||'快照ID')+'"><div class="fh">留空使用默认快照</div></div>'
+   +   '<div class="fg"><label class="fl">SSH 密钥 IDs</label><input class="inp" id="cr-ssh" value="'+escHtml(sshVal)+'" placeholder="12345, 67890"><div class="fh">逗号分隔，留空用默认</div></div>'
+   + '</div>'
+   + '<div class="fg"><label class="fl">IPv4 分配方式</label><select class="inp" id="cr-ipmode" onchange="onCreateIpModeChange()">'
+   +   '<option value="auto">自动分配新 IP</option>'
+   +   '<option value="locked"'+lockedSel+'>优先复用已保护的空闲 IP（'+freeLocked.length+' 个可用）</option>'
+   +   '<option value="manual">手动指定 IP</option>'
+   + '</select><div class="fh">优先复用已被保护（锁定）的 IP，可让重建后的地址保持稳定</div></div>'
+   + '<div class="fg" id="cr-ipmanual" style="display:none;"><label class="fl">选择 IPv4（可多选）</label><select class="inp" id="cr-ips" multiple size="4" style="min-height:96px;">'+ipOpts+'</select><div class="fh">按住 Ctrl/Cmd 多选；数量与创建数量对应</div></div>'
+   + '<div class="tog-row"><div><div class="tog-lbl">锁定新 IP</div><div class="tog-desc">自动分配的新 IP 创建后开启删除保护，重建时保留</div></div><div class="tog-sw on" id="cr-lock" onclick="this.classList.toggle(\'on\')"></div></div>'
+   + '<div class="info-box" style="margin:14px 0 4px;font-size:11px;">✅ 创建完成后自动同步 Vertex 下载器 IP；结果会列出每台机器的 IP 分配情况。</div>'
+   + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">'
+   +   '<button class="btn btn-base" onclick="closeModal()">取消</button>'
+   +   '<button class="btn btn-primary" onclick="doCreate()">✓ 开始创建</button>'
+   + '</div>';
+  openModal('创建服务器', html);
+  onCreateIpModeChange();
+}
+function onCreateIpModeChange(){
+  var mode = document.getElementById('cr-ipmode').value;
+  var box = document.getElementById('cr-ipmanual');
+  if(box) box.style.display = (mode==='manual') ? 'block' : 'none';
+}
+async function doCreate(){
+  var name = (document.getElementById('cr-name').value||'').trim();
+  var count = parseInt(document.getElementById('cr-count').value)||1;
+  var typeSel = document.getElementById('cr-type').value;
+  var imgVal = (document.getElementById('cr-img').value||'').trim() || S.config.initial_snapshot_id;
+  var location = document.getElementById('cr-loc').value;
+  var sshRaw = (document.getElementById('cr-ssh').value||'').trim();
+  var ssh = sshRaw ? sshRaw.split(',').map(function(s){return parseInt(s.trim());}).filter(function(n){return !isNaN(n);}) : (S.config.ssh_keys||[]);
+  var ipMode = document.getElementById('cr-ipmode').value;
+  var lock = document.getElementById('cr-lock').classList.contains('on');
+  if(!name){ toast('请输入服务器名称/前缀','err'); return; }
+  if(!imgVal){ toast('请输入镜像ID','err'); return; }
+  if(count<1 || count>20){ toast('数量需在 1~20 之间','err'); return; }
+  var body = {name:name,count:count,image_id:parseInt(imgVal),location:location,ssh_keys:ssh,ip_mode:ipMode,lock_ip:lock};
+  if(typeSel) body.server_types = [typeSel];
+  if(ipMode==='manual'){
+    var sel = document.getElementById('cr-ips');
+    var ids = Array.prototype.slice.call(sel.selectedOptions).map(function(o){ return parseInt(o.value); });
+    if(!ids.length){ toast('请选择至少一个 IP','err'); return; }
+    body.primary_ipv4_ids = ids;
+  }
+  closeModal();
+  toast('正在创建 '+count+' 台服务器…','wrn');
+  var r = await api('/servers/create','POST',body);
+  if(!r.data || !r.data.servers){ toast((r.data&&r.data.error)||'创建失败','err'); return; }
+  var rows = (r.data.servers||[]).map(function(s){
+    if(s.ok) return '<div class="alloc-row">✅ <b>'+escHtml(s.name)+'</b> → '+escHtml(s.ip||'')+' <span class="mut">'+escHtml(s.server_type||'')+(s.reused_ip?' · 复用IP':'')+'</span></div>';
+    return '<div class="alloc-row" style="color:var(--rose);">❌ <b>'+escHtml(s.name)+'</b> <span class="mut">'+escHtml(s.error||'失败')+'</span></div>';
+  }).join('');
+  openModal('创建结果',
+    '<p style="font-size:13px;color:var(--ink2);margin-bottom:10px;">成功 <b>'+r.data.created+'</b> / 失败 <b>'+r.data.failed+'</b></p>'
+    + '<div class="res-list">'+rows+'</div>'
+    + '<div style="display:flex;justify-content:flex-end;margin-top:16px;"><button class="btn btn-base" onclick="closeModal();refreshServers(true);">确定</button></div>');
+}
+
+/* ─── 定时任务：通用任务列表 ─────────────────────────────────────── */
+var WEEKDAY_LABELS = ['一','二','三','四','五','六','日'];
+var TASK_META = {
+  create:{icon:'🚀', title:'创建服务器', sub:'补足至上限，优先复用已保护 IP', cls:'task-cre'},
+  delete:{icon:'🗑️', title:'删除服务器', sub:'按计划删除（可选仅删指定前缀）', cls:'task-del'},
+  sync:{icon:'🔄', title:'同步 Vertex', sub:'把当前服务器 IP 同步给下载器', cls:'task-sync'}
+};
+var TZ_OPTIONS = ''
+  + '<option value="Asia/Shanghai">Asia/Shanghai（北京 UTC+8）</option>'
+  + '<option value="Asia/Hong_Kong">Asia/Hong_Kong（香港 UTC+8）</option>'
+  + '<option value="Asia/Tokyo">Asia/Tokyo（日本 UTC+9）</option>'
+  + '<option value="Asia/Seoul">Asia/Seoul（韩国 UTC+9）</option>'
+  + '<option value="Asia/Singapore">Asia/Singapore（新加坡 UTC+8）</option>'
+  + '<option value="Europe/Berlin">Europe/Berlin（德国 UTC+1/2）</option>'
+  + '<option value="Europe/London">Europe/London（英国 UTC+0/1）</option>'
+  + '<option value="America/New_York">America/New_York（美东 UTC-5/-4）</option>'
+  + '<option value="America/Los_Angeles">America/Los_Angeles（美西 UTC-8/-7）</option>'
+  + '<option value="UTC">UTC（协调世界时）</option>';
+function ensureTasks(){
+  if(!Array.isArray(S.tasks)) S.tasks = (S.config.scheduled_tasks||[]).map(clone);
+  return S.tasks;
+}
+function buildScheduleShell(){
+  return ''
+   + '<div class="ph"><div class="ph-left"><h2>定时任务</h2><p>每天定时或按间隔循环执行</p></div>'
+   + '<div class="ph-right">'
+   +   '<button class="btn btn-base" id="sched-toggle-btn" onclick="toggleScheduler()">▶ 启动调度器</button>'
+   +   '<button class="btn btn-base" onclick="taskAdd()">＋ 新建任务</button>'
+   +   '<button class="btn btn-primary" onclick="saveSchedule()">✓ 保存配置</button>'
+   + '</div></div>'
+   + '<div class="gcard gcard-pad" style="margin-bottom:20px;">'
+   + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">'
+   +   '<div><div style="font-size:14px;font-weight:700;">定时任务总开关</div><div style="font-size:11px;color:var(--ink3);margin-top:2px;">开启后调度器按周期检查任务，到达条件自动执行</div></div>'
+   +   '<div class="tog-sw" id="tog-sched-master" onclick="toggleScheduleMaster()"></div>'
+   + '</div>'
+   + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+   +   '<label class="fl" style="margin:0;white-space:nowrap;">执行时区</label>'
+   +   '<select class="inp" id="cfg-tz" style="max-width:280px;">'+TZ_OPTIONS+'</select>'
+   +   '<span id="sched-summary" style="font-size:11px;color:var(--ink4);"></span>'
+   + '</div>'
+   + '<div style="margin-top:13px;padding:10px 14px;background:var(--sky);border-radius:10px;display:flex;gap:20px;flex-wrap:wrap;">'
+   +   '<div style="font-size:11px;color:var(--ink3);">🕐 浏览器时间：<span id="srv-localtime" style="font-family:var(--mono);color:var(--ink);font-weight:600;">—</span></div>'
+   +   '<div style="font-size:11px;color:var(--ink3);">📌 保存后由后端确认目标时区时间</div>'
+   + '</div></div>'
+   + '<div id="sched-tasks"></div>'
+   + '<div class="info-box" style="margin-top:16px;line-height:1.9;">'
+   + '📌 <b>创建任务：</b>「可创建服务器上限」是目标总数——不足则补足，达到上限不再新增，并优先复用已保护的空闲 IP。<br>'
+   + '📌 <b>每天定时：</b>匹配星期与 HH:MM，同一分钟只触发一次；<b>按间隔：</b>距上次执行超过设定分钟数后触发。<br>'
+   + '📌 <b>型号优先级：</b>在「监控配置 → 型号重建优先级」中拖动或上下移排序，创建时按顺序尝试。'
+   + '</div>';
+}
+function loadScheduleCfg(){
+  var c = S.config || {};
+  S.tasks = (c.scheduled_tasks||[]).map(clone);
+  var page = document.getElementById('page-schedule');
+  if(!page) return;
+  page.innerHTML = buildScheduleShell();
+  var tz = document.getElementById('cfg-tz');
+  if(tz){
+    var saved = c.schedule_timezone||'Asia/Shanghai';
+    if(!Array.prototype.some.call(tz.options, function(o){return o.value===saved;})) tz.add(new Option(saved,saved));
+    tz.value = saved;
+  }
+  setToggle('tog-sched-master', c.scheduled_tasks_enabled);
+  var srvEl = document.getElementById('srv-localtime');
+  if(srvEl) srvEl.textContent = new Date().toLocaleString('zh-CN');
+  renderTasks();
+}
+function renderTasks(){
+  var box = document.getElementById('sched-tasks');
+  if(!box) return;
+  var tasks = ensureTasks();
+  if(!tasks.length){
+    box.innerHTML = '<div class="empty"><div class="empty-icon">⏰</div><h3>还没有定时任务</h3><p>点击右上角「＋ 新建任务」添加</p></div>';
+    updateTimeline();
+    return;
+  }
+  box.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;" id="sched-tasks-grid">'
+    + tasks.map(taskCard).join('') + '</div>';
+  updateSchedGrid();
+  refreshTaskStatus();
+  updateTimeline();
+}
+function taskCard(t,i){
+  var m = TASK_META[t.type] || {icon:'⏰', title:t.type, sub:'', cls:''};
+  var mode = t.mode || 'daily';
+  var body = '';
+  if(mode==='interval'){
+    body = '<div class="fg"><label class="fl">间隔（分钟）</label><input class="inp" type="number" min="1" value="'+(t.interval_minutes||60)+'" oninput="taskSet('+i+',\'interval_minutes\',this.value,true)"></div>';
+  }else{
+    body = '<div style="background:var(--sky);border-radius:12px;padding:14px;margin-bottom:12px;">'
+      + '<div style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;">每天执行时刻</div>'
+      + '<div style="display:flex;align-items:center;gap:8px;">'
+      + '<input class="inp" type="number" min="0" max="23" value="'+(t.hour==null?0:t.hour)+'" style="width:72px;text-align:center;font-size:22px;font-weight:800;padding:9px;" oninput="taskSet('+i+',\'hour\',this.value,true)">'
+      + '<span style="font-size:28px;color:var(--ink3);font-weight:800;">:</span>'
+      + '<input class="inp" type="number" min="0" max="59" value="'+String(t.minute==null?0:t.minute).padStart(2,'0')+'" style="width:72px;text-align:center;font-size:22px;font-weight:800;padding:9px;" oninput="taskSet('+i+',\'minute\',this.value,true)">'
+      + '</div></div>'
+      + '<div class="fg"><label class="fl">星期</label><div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      + WEEKDAY_LABELS.map(function(lb,di){
+          var on = (t.days||[]).indexOf(di) >= 0;
+          return '<span class="wd-chip'+(on?' on':'')+'" onclick="taskToggleDay('+i+','+di+')">'+lb+'</span>';
+        }).join('')
+      + '</div></div>';
+  }
+  var opts = '';
+  var o = t.options || {};
+  if(t.type==='create'){
+    opts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+      + '<div class="fg"><label class="fl">可创建服务器上限</label><input class="inp" type="number" min="1" value="'+(o.max_servers||3)+'" oninput="taskOpt('+i+',\'max_servers\',this.value,true)"><div class="fh">目标总数：不足补足，达到上限不再创建</div></div>'
+      + '<div class="fg"><label class="fl">名称前缀</label><input class="inp" value="'+escHtml(o.prefix||'hetzner-auto')+'" oninput="taskOpt('+i+',\'prefix\',this.value)"></div>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+      + '<div class="fg"><label class="fl">地区</label><input class="inp" value="'+escHtml(o.location||S.config.default_location||'nbg1')+'" oninput="taskOpt('+i+',\'location\',this.value)"></div>'
+      + '<div class="fg"><label class="fl">镜像/快照 ID</label><input class="inp" value="'+escHtml(o.image_id||S.config.initial_snapshot_id||'')+'" oninput="taskOpt('+i+',\'image_id\',this.value)"></div>'
+      + '</div>'
+      + '<div class="tog-row"><div><div class="tog-lbl">优先复用已保护的 IP</div><div class="tog-desc">创建时先占用已锁定且空闲的 IPv4</div></div><div class="tog-sw'+((o.use_locked_ips!==false)?' on':'')+'" onclick="taskOptToggle('+i+',\'use_locked_ips\')"></div></div>'
+      + '<div class="tog-row"><div><div class="tog-lbl">锁定新建 IP</div><div class="tog-desc">自动分配的新 IP 创建后开启删除保护</div></div><div class="tog-sw'+((o.lock_new_ips!==false)?' on':'')+'" onclick="taskOptToggle('+i+',\'lock_new_ips\')"></div></div>';
+  }else if(t.type==='delete'){
+    opts = '<div class="fg"><label class="fl">仅删除名称前缀（可选）</label><input class="inp" placeholder="留空=删除全部" value="'+escHtml(o.only_prefix||'')+'" oninput="taskOpt('+i+',\'only_prefix\',this.value)"><div class="fh">留空将删除账户下所有服务器</div></div>';
+  }
+  return '<div class="task-card '+m.cls+(t.enabled?'':' task-off')+'">'
+   + '<div class="task-card-hd"><div class="task-icon-box">'+m.icon+'</div>'
+   +   '<div style="flex:1;"><div class="task-title">'+m.title+' <span style="font-family:var(--mono);font-size:11px;color:var(--ink4);">'+escHtml(t.id||'')+'</span></div><div class="task-sub">'+m.sub+'</div></div>'
+   +   '<div class="tog-sw'+(t.enabled?' on':'')+'" onclick="taskToggle('+i+')"></div></div>'
+   + '<div class="fg"><label class="fl">触发方式</label><select class="inp" onchange="taskSet('+i+',\'mode\',this.value)">'
+   +   '<option value="daily"'+(mode==='daily'?' selected':'')+'>每天定时</option>'
+   +   '<option value="interval"'+(mode==='interval'?' selected':'')+'>按间隔循环</option>'
+   + '</select></div>'
+   + body + opts
+   + '<div class="task-foot"><div class="task-last" data-tid="'+escHtml(t.id||'')+'">上次: —<br>下次: —</div>'
+   + '<div style="display:flex;gap:6px;">'
+   +   '<button class="btn btn-success btn-xs" onclick="taskRunNow('+i+')">立即执行</button>'
+   +   '<button class="btn btn-danger btn-xs" onclick="taskRemove('+i+')">删除</button>'
+   + '</div></div></div>';
+}
+function taskSet(i,field,val,isNum){
+  var t = ensureTasks()[i]; if(!t) return;
+  t[field] = isNum ? (parseInt(val)||0) : val;
+  if(field==='mode') renderTasks();
+}
+function taskOpt(i,key,val,isNum){
+  var t = ensureTasks()[i]; if(!t) return;
+  t.options = t.options || {};
+  t.options[key] = isNum ? (parseInt(val)||0) : val;
+}
+function taskOptToggle(i,key){
+  var t = ensureTasks()[i]; if(!t) return;
+  t.options = t.options || {};
+  var cur = (t.options[key] !== false);
+  t.options[key] = !cur;
+  renderTasks();
+}
+function taskToggle(i){
+  var t = ensureTasks()[i]; if(!t) return;
+  t.enabled = !t.enabled;
+  renderTasks();
+}
+function taskToggleDay(i,d){
+  var t = ensureTasks()[i]; if(!t) return;
+  t.days = t.days || [0,1,2,3,4,5,6];
+  var p = t.days.indexOf(d);
+  if(p>=0) t.days.splice(p,1); else t.days.push(d);
+  t.days.sort(function(a,b){return a-b;});
+  renderTasks();
+}
+function taskAdd(){
+  openModal('新建定时任务',
+    '<p style="font-size:12px;color:var(--ink3);margin-bottom:12px;">选择任务类型</p>'
+    + '<div style="display:flex;flex-direction:column;gap:8px;">'
+    + '<button class="btn btn-success" style="justify-content:flex-start;" onclick="doTaskAdd(\'create\')">🚀 创建服务器（补足至上限）</button>'
+    + '<button class="btn btn-danger" style="justify-content:flex-start;" onclick="doTaskAdd(\'delete\')">🗑️ 删除服务器</button>'
+    + '<button class="btn btn-base" style="justify-content:flex-start;" onclick="doTaskAdd(\'sync\')">🔄 同步 Vertex IP</button>'
+    + '</div>');
+}
+function doTaskAdd(type){
+  var base = {id:'task-'+Date.now().toString(36), type:type, enabled:false, mode:'daily',
+              hour:8, minute:0, days:[0,1,2,3,4,5,6], interval_minutes:60, options:{}};
+  if(type==='create') base.options = {max_servers:S.config.schedule_max_servers||3,
+      prefix:S.config.schedule_server_name_prefix||'hetzner-auto',
+      location:S.config.default_location||'nbg1', image_id:S.config.initial_snapshot_id||'',
+      use_locked_ips:true, lock_new_ips:true};
+  if(type==='delete') base.options = {only_prefix:''};
+  ensureTasks().push(base);
+  closeModal();
+  renderTasks();
+}
+function taskRemove(i){
+  var t = ensureTasks()[i]; if(!t) return;
+  openModal('删除任务',
+    '<p style="color:var(--ink2);margin-bottom:16px;">确定删除任务 <b>'+escHtml(t.id||'')+'</b>？</p>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button>'
+    + '<button class="btn btn-danger" onclick="doTaskRemove('+i+')">删除</button></div>');
+}
+function doTaskRemove(i){ ensureTasks().splice(i,1); closeModal(); renderTasks(); }
+function taskRunNow(i){
+  var t = ensureTasks()[i]; if(!t) return;
+  var m = TASK_META[t.type]||{title:t.type};
+  openModal('确认立即执行',
+    '<p style="color:var(--ink2);margin-bottom:16px;">立即执行任务 <b>'+m.title+'</b>？</p>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-base" onclick="closeModal()">取消</button>'
+    + '<button class="btn btn-primary" onclick="doTaskRunNow('+i+')">执行</button></div>');
+}
+async function doTaskRunNow(i){
+  var t = ensureTasks()[i]; if(!t) return;
+  closeModal();
+  toast('任务已触发，请查看运行日志','wrn');
+  var r = await api('/scheduler/run-task','POST',{task:t});
+  if(!r.ok) toast(r.data.error||'触发失败','err');
+}
+function refreshTaskStatus(){
+  if(!S.taskStatus) return;
+  Array.prototype.forEach.call(document.querySelectorAll('#sched-tasks [data-tid]'), function(el){
+    var tid = el.getAttribute('data-tid');
+    var last = (S.taskStatus.last||{})[tid];
+    var next = (S.taskStatus.next||{})[tid];
+    el.innerHTML = '上次: '+fmtTime(last)+'<br>下次: '+fmtTime(next);
+  });
+}
+function updateTimeline(){
+  var el = document.getElementById('sched-summary');
+  if(!el) return;
+  var tasks = ensureTasks();
+  var on = tasks.filter(function(t){ return t.enabled; });
+  el.textContent = on.length ? ('已启用 '+on.length+' / 共 '+tasks.length+' 个任务')
+                             : ('共 '+tasks.length+' 个任务，均未启用');
+}
+async function saveSchedule(){
+  var tz = (document.getElementById('cfg-tz')||{}).value || 'Asia/Shanghai';
+  var body = {
+    schedule_timezone: tz,
+    scheduled_tasks_enabled: !!S.config.scheduled_tasks_enabled,
+    scheduled_tasks: ensureTasks()
+  };
+  var r = await api('/config','POST',body);
+  if(r.ok){
+    await loadConfig();
+    S.tasks = (S.config.scheduled_tasks||[]).map(clone);
+    toast('定时任务已保存');
+    await checkMonitor();
+  }else toast('保存失败','err');
+}
+async function checkMonitor(){
+  var r = await api('/monitor/status');
+  var data = r.data || {};
+  S.monitorRunning = data.running;
+  S.taskStatus = {last:data.task_last_run||{}, next:data.task_next_run||{}};
+  updateMonUI(data);
+  updateSchedStatus(data);
+  refreshTaskStatus();
+}
 </script>
 </body>
 </html>

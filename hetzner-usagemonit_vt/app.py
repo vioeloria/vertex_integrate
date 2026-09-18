@@ -104,8 +104,12 @@ DEFAULT_CONFIG = {
     "schedule_create_enabled": False,       # 定时创建开关
     "schedule_create_hour": 8,              # 创建时刻（小时，本地时间）
     "schedule_create_minute": 0,            # 创建时刻（分钟）
-    "schedule_create_count": 3,             # 定时创建台数
+    "schedule_create_count": 3,             # [旧] 定时创建台数（兼容保留）
     "schedule_server_name_prefix": "hetzner-auto",  # 创建时名称前缀
+    # ── 通用定时任务（新版）──
+    "schedule_max_servers": 3,              # 定时创建的目标/上限台数（补足至此数）
+    "scheduled_tasks": [],                  # 通用任务列表，见 _default_tasks_from_legacy
+    "scheduler_tick_seconds": 20,           # 调度器检查间隔（秒）
 }
 
 
@@ -114,9 +118,14 @@ def load_config() -> Dict:
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 cfg = json.load(f)
+                had_tasks = isinstance(cfg.get("scheduled_tasks"), list)
                 for k, v in DEFAULT_CONFIG.items():
                     if k not in cfg:
                         cfg[k] = v
+                # 旧配置迁移：首次出现时把旧的删/建字段转成通用任务列表并落盘
+                if not had_tasks:
+                    cfg["scheduled_tasks"] = _default_tasks_from_legacy(cfg)
+                    save_config(cfg)
                 return cfg
     except Exception as e:
         logger.error(f"Load config error: {e}")
@@ -131,6 +140,60 @@ def save_config(cfg: Dict):
         logger.error(f"Save config error: {e}")
 
 
+# ─── 通用定时任务模型 ──────────────────────────────────────────────────────────
+# 每个任务形如：
+# {
+#   "id": "task-xxxx", "type": "create" | "delete" | "sync",
+#   "enabled": true, "mode": "daily" | "interval",
+#   "hour": 8, "minute": 0, "days": [0,1,2,3,4,5,6],   # 0=周一 … 6=周日（Python weekday）
+#   "interval_minutes": 60,
+#   "options": { ... 见各任务类型 ... }
+# }
+VALID_TASK_TYPES = ("create", "delete", "sync")
+
+
+def _default_tasks_from_legacy(cfg: Dict) -> List[Dict]:
+    """把旧的 schedule_* 配置迁移成通用任务列表。"""
+    return [
+        {
+            "id": "create-daily",
+            "type": "create",
+            "enabled": bool(cfg.get("schedule_create_enabled", False)),
+            "mode": "daily",
+            "hour": int(cfg.get("schedule_create_hour", 8) or 0),
+            "minute": int(cfg.get("schedule_create_minute", 0) or 0),
+            "days": [0, 1, 2, 3, 4, 5, 6],
+            "interval_minutes": 60,
+            "options": {
+                "max_servers": int(cfg.get("schedule_max_servers",
+                                           cfg.get("schedule_create_count", 3)) or 3),
+                "prefix": cfg.get("schedule_server_name_prefix", "hetzner-auto"),
+                "location": cfg.get("default_location", "nbg1"),
+                "image_id": cfg.get("initial_snapshot_id", ""),
+                "server_types": list(cfg.get("server_types", []) or []),
+                "ssh_keys": list(cfg.get("ssh_keys", []) or []),
+                "use_locked_ips": True,
+                "lock_new_ips": True,
+            },
+        },
+        {
+            "id": "delete-daily",
+            "type": "delete",
+            "enabled": bool(cfg.get("schedule_delete_enabled", False)),
+            "mode": "daily",
+            "hour": int(cfg.get("schedule_delete_hour", 23) or 0),
+            "minute": int(cfg.get("schedule_delete_minute", 0) or 0),
+            "days": [0, 1, 2, 3, 4, 5, 6],
+            "interval_minutes": 1440,
+            "options": {},
+        },
+    ]
+
+
+def _new_task_id() -> str:
+    return f"task-{int(time.time() * 1000) % 10_000_000}-{secrets.token_hex(2)}"
+
+
 # ─── Monitor State ─────────────────────────────────────────────────────────────
 monitor_state = {
     "running": False,
@@ -139,6 +202,12 @@ monitor_state = {
     "servers_cache": [],
     "logs": [],
     "stop_event": threading.Event(),
+    # ── 从 Hetzner API 拉取的动态数据 ──
+    "catalog": {},            # 型号目录（含价格 / 可用性）
+    "locations": [],          # 地区列表
+    "datacenters": [],        # 数据中心列表
+    "pricing": {},            # 全局价格
+    "catalog_updated": None,  # 目录最后刷新时间
     # 定时任务状态
     "scheduler_running": False,
     "scheduler_stop_event": threading.Event(),
@@ -146,6 +215,9 @@ monitor_state = {
     "last_scheduled_create": None,
     "next_scheduled_delete": None,
     "next_scheduled_create": None,
+    # 通用任务运行状态： {task_id: iso时间}
+    "task_last_run": {},
+    "task_next_run": {},
 }
 
 
@@ -194,6 +266,149 @@ class HetznerAPI:
         except Exception as e:
             add_log(f"获取SSH密钥失败: {e}", "error"); return []
 
+    # ── 目录 / 价格 / 地区 ──────────────────────────────────────────────
+    def get_server_types(self) -> List[Dict]:
+        try:
+            return self._get("/server_types").get("server_types", [])
+        except Exception as e:
+            add_log(f"获取型号列表失败: {e}", "error"); return []
+
+    def get_pricing(self) -> Dict:
+        try:
+            return self._get("/pricing").get("pricing", {})
+        except Exception as e:
+            add_log(f"获取价格失败: {e}", "error"); return {}
+
+    def get_locations(self) -> List[Dict]:
+        try:
+            return self._get("/locations").get("locations", [])
+        except Exception as e:
+            add_log(f"获取地区失败: {e}", "error"); return []
+
+    def get_datacenters(self) -> List[Dict]:
+        try:
+            return self._get("/datacenters").get("datacenters", [])
+        except Exception as e:
+            add_log(f"获取数据中心失败: {e}", "error"); return []
+
+    # ── 其他产品列表 ────────────────────────────────────────────────────
+    def get_primary_ips(self) -> List[Dict]:
+        try:
+            return self._get("/primary_ips").get("primary_ips", [])
+        except Exception as e:
+            add_log(f"获取 Primary IP 列表失败: {e}", "error"); return []
+
+    def get_floating_ips(self) -> List[Dict]:
+        try:
+            return self._get("/floating_ips").get("floating_ips", [])
+        except Exception as e:
+            add_log(f"获取 Floating IP 列表失败: {e}", "error"); return []
+
+    def get_volumes(self) -> List[Dict]:
+        try:
+            return self._get("/volumes").get("volumes", [])
+        except Exception as e:
+            add_log(f"获取 Volume 列表失败: {e}", "error"); return []
+
+    def get_load_balancers(self) -> List[Dict]:
+        try:
+            return self._get("/load_balancers").get("load_balancers", [])
+        except Exception as e:
+            add_log(f"获取负载均衡列表失败: {e}", "error"); return []
+
+    def get_firewalls(self) -> List[Dict]:
+        try:
+            return self._get("/firewalls").get("firewalls", [])
+        except Exception as e:
+            add_log(f"获取防火墙列表失败: {e}", "error"); return []
+
+    # ── Primary IP 操作（锁 IP / 批量创建删除） ─────────────────────────
+    @staticmethod
+    def _api_err(r) -> str:
+        try:
+            e = r.json().get("error", {})
+            code = e.get("code", "")
+            msg = e.get("message", r.text)
+            return f"[{code}] {msg}" if code else msg
+        except Exception:
+            return r.text
+
+    def create_primary_ip(self, name: str, ip_type: str = "ipv4",
+                          location: Optional[str] = None,
+                          assignee_id: Optional[int] = None,
+                          auto_delete: bool = False) -> Dict:
+        payload: Dict = {"name": self.sanitize_name(name), "type": ip_type,
+                         "auto_delete": bool(auto_delete)}
+        if assignee_id:
+            payload["assignee_type"] = "server"
+            payload["assignee_id"] = int(assignee_id)
+        elif location:
+            payload["location"] = location
+        try:
+            r = requests.post(f"{self.BASE}/primary_ips", headers=self.headers,
+                              json=payload, timeout=20)
+        except Exception as e:
+            return {"ok": False, "name": name, "error": str(e)}
+        if r.status_code == 201:
+            ip = r.json().get("primary_ip", {})
+            return {"ok": True, "name": name, "id": ip.get("id"),
+                    "ip": ip.get("ip"), "type": ip.get("type"),
+                    "location": (ip.get("location") or {}).get("name", location)}
+        return {"ok": False, "name": name, "error": self._api_err(r)}
+
+    def delete_primary_ip(self, ip_id: int) -> Tuple[bool, str]:
+        try:
+            r = requests.delete(f"{self.BASE}/primary_ips/{ip_id}",
+                                headers=self.headers, timeout=15)
+        except Exception as e:
+            return False, str(e)
+        if r.status_code in (200, 204):
+            return True, ""
+        if r.status_code == 404:
+            return True, "已不存在"
+        return False, self._api_err(r)
+
+    def update_primary_ip(self, ip_id: int, **fields) -> Tuple[bool, str]:
+        try:
+            r = requests.put(f"{self.BASE}/primary_ips/{ip_id}", headers=self.headers,
+                             json=fields, timeout=15)
+        except Exception as e:
+            return False, str(e)
+        if r.status_code == 200:
+            return True, ""
+        return False, self._api_err(r)
+
+    def assign_primary_ip(self, ip_id: int, server_id: int) -> Tuple[bool, str]:
+        try:
+            r = requests.post(f"{self.BASE}/primary_ips/{ip_id}/actions/assign",
+                              headers=self.headers, timeout=15,
+                              json={"assignee_type": "server", "assignee_id": int(server_id)})
+        except Exception as e:
+            return False, str(e)
+        if r.status_code == 201:
+            return True, ""
+        return False, self._api_err(r)
+
+    def unassign_primary_ip(self, ip_id: int) -> Tuple[bool, str]:
+        try:
+            r = requests.post(f"{self.BASE}/primary_ips/{ip_id}/actions/unassign",
+                              headers=self.headers, timeout=15, json={})
+        except Exception as e:
+            return False, str(e)
+        if r.status_code == 201:
+            return True, ""
+        return False, self._api_err(r)
+
+    def change_primary_ip_protection(self, ip_id: int, delete: bool) -> Tuple[bool, str]:
+        try:
+            r = requests.post(f"{self.BASE}/primary_ips/{ip_id}/actions/change_protection",
+                              headers=self.headers, timeout=15, json={"delete": bool(delete)})
+        except Exception as e:
+            return False, str(e)
+        if r.status_code == 201:
+            return True, ""
+        return False, self._api_err(r)
+
     @staticmethod
     def sanitize_name(name: str) -> str:
         import re as _re
@@ -208,24 +423,36 @@ class HetznerAPI:
         return n
 
     def create_server(self, name: str, server_type: str, image_id: int,
-                      ssh_keys: List, location: str = "nbg1") -> Optional[Dict]:
+                      ssh_keys: List, location: str = "nbg1",
+                      primary_ipv4: Optional[int] = None,
+                      primary_ipv6: Optional[int] = None) -> Optional[Dict]:
         safe_name = self.sanitize_name(name)
         if safe_name != name:
             add_log(f"  名称规范化: '{name}' → '{safe_name}'")
+        public_net: Dict = {"enable_ipv4": True, "enable_ipv6": True}
+        if primary_ipv4:
+            public_net["ipv4"] = int(primary_ipv4)
+        if primary_ipv6:
+            public_net["ipv6"] = int(primary_ipv6)
         try:
             r = requests.post(f"{self.BASE}/servers", headers=self.headers, timeout=30, json={
                 "name": safe_name, "server_type": server_type, "image": int(image_id),
                 "location": location, "ssh_keys": ssh_keys,
-                "public_net": {"enable_ipv4": True, "enable_ipv6": True},
+                "public_net": public_net,
                 "start_after_create": True
             })
             if r.status_code == 201:
                 d = r.json()
+                srv = d["server"]
+                srv_v4 = (srv.get("public_net") or {}).get("ipv4") or {}
+                srv_v6 = (srv.get("public_net") or {}).get("ipv6") or {}
                 return {
-                    "id": d["server"]["id"], "name": d["server"]["name"],
-                    "ip": d["server"]["public_net"]["ipv4"]["ip"],
-                    "server_type": d["server"]["server_type"]["name"],
-                    "root_password": d.get("root_password")
+                    "id": srv["id"], "name": srv["name"],
+                    "ip": srv_v4.get("ip", ""),
+                    "server_type": srv["server_type"]["name"],
+                    "root_password": d.get("root_password"),
+                    "primary_ipv4_id": srv_v4.get("id"),
+                    "primary_ipv6_id": srv_v6.get("id"),
                 }
             err_body = r.json()
             err_code = err_body.get("error", {}).get("code", "")
@@ -239,13 +466,16 @@ class HetznerAPI:
 
     def create_server_with_fallback(self, name: str, server_types: List[str],
                                     image_id: int, ssh_keys: List,
-                                    location: str = "nbg1") -> Optional[Dict]:
+                                    location: str = "nbg1",
+                                    primary_ipv4: Optional[int] = None,
+                                    primary_ipv6: Optional[int] = None) -> Optional[Dict]:
         base_name = self.sanitize_name(name)
         fallback_name = self.sanitize_name(f"{base_name}-{int(time.time()) % 100000}")
 
         for st in server_types:
             add_log(f"  → 尝试型号 [{st}] name={base_name} ...")
-            result = self.create_server(base_name, st, image_id, ssh_keys, location)
+            result = self.create_server(base_name, st, image_id, ssh_keys, location,
+                                        primary_ipv4, primary_ipv6)
 
             if result and not result.get("_name_conflict"):
                 add_log(f"  ✅ [{st}] 创建成功: {result['ip']}")
@@ -253,7 +483,8 @@ class HetznerAPI:
 
             if result and result.get("_name_conflict"):
                 add_log(f"  ⚠ 名称冲突，改用备用名称 [{fallback_name}] 重试...", "warn")
-                result2 = self.create_server(fallback_name, st, image_id, ssh_keys, location)
+                result2 = self.create_server(fallback_name, st, image_id, ssh_keys, location,
+                                             primary_ipv4, primary_ipv6)
                 if result2 and not result2.get("_name_conflict"):
                     add_log(f"  ✅ [{st}] 备用名创建成功: {result2['ip']}")
                     return result2
@@ -290,38 +521,215 @@ def get_hetzner() -> Optional[HetznerAPI]:
     return HetznerAPI(cfg["hetzner_api_key"]) if cfg.get("hetzner_api_key") else None
 
 
+# ─── 动态型号目录（从 Hetzner API 拉取配置 / 价格 / 可用性）──────────────────
+def _series_of(name: str) -> str:
+    m = re.match(r'([a-z]+)', name or '')
+    return m.group(1).upper() if m else ''
+
+
+def _fmt_bytes_traffic(b) -> str:
+    try:
+        b = int(b or 0)
+    except (TypeError, ValueError):
+        return ""
+    if b <= 0:
+        return ""
+    tb = b / (1024 ** 4)
+    if tb >= 1:
+        return f"{tb:g}TB"
+    return f"{b / (1024 ** 3):g}GB"
+
+
+def build_dynamic_catalog(server_types: List[Dict]) -> Dict[str, Dict]:
+    """把 /server_types 的响应整理成前端友好结构（含各地区的价格与库存）。"""
+    catalog: Dict[str, Dict] = {}
+    for st in server_types or []:
+        name = st.get("name", "")
+        if not name:
+            continue
+        prices: Dict[str, Dict] = {}
+        for p in st.get("prices") or []:
+            loc = p.get("location")
+            if not loc:
+                continue
+            h = p.get("price_hourly") or {}
+            m = p.get("price_monthly") or {}
+            t = p.get("price_per_tb_traffic") or {}
+            prices[loc] = {
+                "hourly_net": h.get("net"), "hourly_gross": h.get("gross"),
+                "monthly_net": m.get("net"), "monthly_gross": m.get("gross"),
+                "included_traffic": p.get("included_traffic", 0),
+                "traffic_per_tb_net": t.get("net"),
+            }
+        locs: Dict[str, Dict] = {}
+        for l in st.get("locations") or []:
+            locs[l.get("name")] = {
+                "available": l.get("available", True),
+                "deprecation": l.get("deprecation"),
+            }
+        dep = st.get("deprecation") or {}
+        deprecated = bool(st.get("deprecated")) or bool(dep.get("unavailable_after"))
+        default_loc = "nbg1" if "nbg1" in prices else (next(iter(prices), ""))
+        catalog[name] = {
+            "id": st.get("id"),
+            "cores": st.get("cores"),
+            "memory": st.get("memory"),
+            "disk": st.get("disk"),
+            "series": _series_of(name),
+            "arch": st.get("architecture", "x86"),
+            "cpu_type": st.get("cpu_type", ""),
+            "category": st.get("category", ""),
+            "storage_type": st.get("storage_type", ""),
+            "deprecated": deprecated,
+            "deprecation": dep,
+            "prices": prices,
+            "locations": locs,
+            "traffic": _fmt_bytes_traffic((prices.get(default_loc) or {}).get("included_traffic")),
+        }
+    return catalog
+
+
+def refresh_catalog(reason: str = "") -> bool:
+    """从 Hetzner API 拉取型号/地区/价格并缓存到 monitor_state。"""
+    hz = get_hetzner()
+    if not hz:
+        return False
+    try:
+        server_types = hz.get_server_types()
+        if not server_types:
+            add_log(f"目录刷新失败：未获取到型号{' ('+reason+')' if reason else ''}", "warn")
+            return False
+        catalog = build_dynamic_catalog(server_types)
+        monitor_state["catalog"] = catalog
+        monitor_state["locations"] = hz.get_locations()
+        monitor_state["datacenters"] = hz.get_datacenters()
+        monitor_state["pricing"] = hz.get_pricing()
+        monitor_state["catalog_updated"] = datetime.now().isoformat()
+        add_log(f"📦 已从 API 刷新型号目录：{len(catalog)} 个型号 / "
+                f"{len(monitor_state['locations'])} 个地区{' ('+reason+')' if reason else ''}")
+        return True
+    except Exception as e:
+        add_log(f"目录刷新异常: {e}", "error")
+        return False
+
+
+def get_catalog() -> Dict[str, Dict]:
+    """优先返回 API 目录，未拉取时回退到内置目录。"""
+    cat = monitor_state.get("catalog")
+    if cat:
+        return cat
+    return {k: dict(v) for k, v in SERVER_TYPE_CATALOG.items()}
+
+
+# ─── Primary IP 锁 / 保留辅助 ─────────────────────────────────────────────────
+def _set_ip_lock(ip_id: int, locked: bool) -> Tuple[bool, str]:
+    """锁定 = 关闭自动删除 + 开启删除保护；解锁相反。"""
+    hz = get_hetzner()
+    if not hz:
+        return False, "API Key 未配置"
+    ok1, e1 = hz.update_primary_ip(ip_id, auto_delete=not locked)
+    ok2, e2 = hz.change_primary_ip_protection(ip_id, delete=bool(locked))
+    if ok1 and ok2:
+        return True, ("已锁定" if locked else "已解锁")
+    return False, (e1 or e2 or "操作失败")
+
+
+def _preserved_primary_ips(server: Dict, ip_map: Dict[int, Dict]) -> Tuple[Optional[int], Optional[int]]:
+    """判断服务器重建时是否保留其 Primary IP（已锁定 / 关闭自动删除）。"""
+    keep_v4 = keep_v6 = None
+    for key, out in (("primary_ipv4_id", "v4"), ("primary_ipv6_id", "v6")):
+        ip_id = server.get(key)
+        if not ip_id:
+            continue
+        info = ip_map.get(ip_id)
+        if not info:
+            continue
+        if (not info.get("auto_delete")) or (info.get("protection") or {}).get("delete"):
+            if out == "v4":
+                keep_v4 = ip_id
+            else:
+                keep_v6 = ip_id
+    return keep_v4, keep_v6
+
+
+def _free_locked_primary_ips(hz: "HetznerAPI", location: Optional[str] = None,
+                             ip_type: str = "ipv4",
+                             exclude: Optional[set] = None) -> List[Dict]:
+    """
+    返回「已被保护（锁定）且未分配」的 Primary IP 列表，供创建服务器时优先复用。
+    location 为空则不限制地区；exclude 用于排除本批次已占用的 IP id。
+    """
+    exclude = exclude or set()
+    try:
+        ips = hz.get_primary_ips()
+    except Exception as e:
+        add_log(f"获取 Primary IP 列表失败: {e}", "warn")
+        return []
+    out = []
+    for ip in ips or []:
+        if not ip.get("id") or ip.get("id") in exclude:
+            continue
+        if ip.get("type") != ip_type:
+            continue
+        if ip.get("assignee_id"):
+            continue
+        locked = (not ip.get("auto_delete")) or (ip.get("protection") or {}).get("delete")
+        if not locked:
+            continue
+        if location and (ip.get("location") or {}).get("name") != location:
+            continue
+        out.append({"id": ip["id"], "ip": ip.get("ip"), "name": ip.get("name"),
+                    "location": (ip.get("location") or {}).get("name", "")})
+    return out
+
+
 # ─── 全局 Cookie 管理器单例 ────────────────────────────────────────────────────
 _vcm_instance: Optional["VertexCookieManager"] = None
+_vcm_signature: Optional[tuple] = None
 _vcm_lock = threading.Lock()
 
 
+def reset_vcm():
+    """配置变更后强制下次重建 Cookie 管理器。"""
+    global _vcm_instance, _vcm_signature
+    with _vcm_lock:
+        _vcm_instance = None
+        _vcm_signature = None
+
+
 def _build_vcm() -> Optional["VertexCookieManager"]:
-    global _vcm_instance
+    global _vcm_instance, _vcm_signature
     if not _VCM_AVAILABLE:
         return None
     with _vcm_lock:
-        if _vcm_instance is None:
-            cfg   = load_config()
-            url   = cfg.get("vertex_api_url", "")
-            user  = cfg.get("vertex_username", "")
-            plain  = cfg.get("vertex_password", "")
-            hashed = cfg.get("vertex_password_md5", "")
-            if url and user and (plain or hashed):
-                if plain:
-                    _vcm_instance = VertexCookieManager(
-                        login_url      = url,
-                        username       = user,
-                        password       = plain,
-                        check_interval = int(cfg.get("vertex_cookie_check_interval", 300)),
-                    )
-                else:
-                    _vcm_instance = VertexCookieManager(
-                        login_url          = url,
-                        username           = user,
-                        password           = hashed,
-                        password_is_hashed = True,
-                        check_interval     = int(cfg.get("vertex_cookie_check_interval", 300)),
-                    )
+        cfg   = load_config()
+        url   = cfg.get("vertex_api_url", "")
+        user  = cfg.get("vertex_username", "")
+        plain  = cfg.get("vertex_password", "")
+        hashed = cfg.get("vertex_password_md5", "")
+        interval = int(cfg.get("vertex_cookie_check_interval", 300))
+        # 凭据签名：任一字段变化则重建实例
+        signature = (url, user, plain, hashed, interval)
+        if _vcm_instance is not None and _vcm_signature == signature:
+            return _vcm_instance
+        _vcm_instance = None
+        _vcm_signature = signature
+        if url and user and (plain or hashed):
+            if plain:
+                _vcm_instance = VertexCookieManager(
+                    login_url      = url,
+                    username       = user,
+                    password       = plain,
+                    check_interval = interval,
+                )
+            else:
+                _vcm_instance = VertexCookieManager(
+                    login_url          = url,
+                    username           = user,
+                    password           = hashed,
+                    password_is_hashed = True,
+                    check_interval     = interval,
+                )
         return _vcm_instance
 
 
@@ -586,19 +994,32 @@ def enrich_server(s: Dict) -> Dict:
     included = int(s.get("included_traffic") or 1)
     ratio = outgoing / included if included > 0 else 0
     pub = s.get("public_net", {})
-    ipv4 = (pub.get("ipv4") or {}).get("ip", "")
-    ipv6 = (pub.get("ipv6") or {}).get("ip", "")
+    pub_v4 = pub.get("ipv4") or {}
+    pub_v6 = pub.get("ipv6") or {}
+    ipv4 = pub_v4.get("ip", "")
+    ipv6 = pub_v6.get("ip", "")
     img = s.get("image") or {}
     stype_name = (s.get("server_type") or {}).get("name", "")
+    location = (s.get("datacenter") or {}).get("location", {}).get("name", "")
+    catalog = get_catalog()
+    cat = catalog.get(stype_name, {})
+    price = (cat.get("prices") or {}).get(location, {})
     return {
         "id": s["id"], "name": s["name"], "status": s.get("status", "unknown"),
         "ipv4": ipv4, "ipv6": ipv6, "server_type": stype_name,
-        "server_type_info": SERVER_TYPE_CATALOG.get(stype_name, {}),
-        "location": (s.get("datacenter") or {}).get("location", {}).get("name", ""),
+        "server_type_info": cat or SERVER_TYPE_CATALOG.get(stype_name, {}),
+        "location": location,
         "datacenter": (s.get("datacenter") or {}).get("name", ""),
         "outgoing_traffic": outgoing, "included_traffic": included,
         "usage_percent": round(ratio * 100, 2), "usage_ratio": ratio,
         "created": s.get("created", ""),
+        # Primary IP（用于锁 IP / 重建保留）
+        "primary_ipv4_id": pub_v4.get("id"),
+        "primary_ipv6_id": pub_v6.get("id"),
+        # 价格（net，单位 EUR）
+        "price": price,
+        "monthly_price": price.get("monthly_net"),
+        "hourly_price": price.get("hourly_net"),
         "image": {"id": img.get("id"), "name": img.get("name") or img.get("description", ""),
                   "type": img.get("type", "")}
     }
@@ -640,12 +1061,24 @@ def do_check_and_rebuild():
 
     rebuild_results = []
     if high_traffic and auto_rebuild and snapshot_id:
+        try:
+            ip_map = {ip["id"]: ip for ip in hz.get_primary_ips() if ip.get("id")}
+        except Exception:
+            ip_map = {}
         for s in high_traffic:
             add_log(f"⚠️ {s['name']} ({s['ipv4']}) 超阈值 {s['usage_percent']}%，开始重建...")
 
             old_name = s["name"]
             old_ip   = s["ipv4"]
             old_id   = s["id"]
+
+            keep_v4, keep_v6 = _preserved_primary_ips(s, ip_map)
+            if keep_v4 or keep_v6:
+                # 关闭自动删除，避免随旧服务器一起被销毁
+                for kid in (keep_v4, keep_v6):
+                    if kid:
+                        hz.update_primary_ip(kid, auto_delete=False)
+                add_log(f"  🔒 锁定 IP 保留：IPv4#{keep_v4} IPv6#{keep_v6}")
 
             add_log(f"  [1/2] 删除旧服务器 {old_name} (id={old_id})...")
             if not hz.delete_server(old_id):
@@ -658,7 +1091,8 @@ def do_check_and_rebuild():
 
             add_log(f"  [2/2] 创建新服务器 {old_name}...")
             new_sv = hz.create_server_with_fallback(
-                old_name, server_types, int(snapshot_id), ssh_keys, location
+                old_name, server_types, int(snapshot_id), ssh_keys, location,
+                primary_ipv4=keep_v4, primary_ipv6=keep_v6
             )
             if not new_sv:
                 add_log(f"  ❌ 新服务器创建失败", "error")
@@ -722,16 +1156,21 @@ def monitor_loop(stop_event: threading.Event):
 
 # ─── 定时删建任务 ────────────────────────────────────────────────────────────────
 
-def do_scheduled_delete_all():
-    """定时删除所有服务器"""
-    add_log("🗑️ ━━━ 定时任务：删除全部服务器 ━━━")
+def do_scheduled_delete_all(opts: Optional[Dict] = None):
+    """定时删除服务器。opts.only_prefix 可只删除指定前缀的机器（留空=全部）。"""
+    opts = opts or {}
+    add_log("🗑️ ━━━ 定时任务：删除服务器 ━━━")
     hz = get_hetzner()
     if not hz:
         add_log("定时删除：未配置 API Key", "warn"); return
 
     servers = hz.get_servers()
+    only_prefix = (opts.get("only_prefix") or "").strip()
+    if only_prefix:
+        servers = [s for s in servers if str(s.get("name", "")).startswith(only_prefix)]
+        add_log(f"定时删除：仅匹配前缀 '{only_prefix}'")
     if not servers:
-        add_log("定时删除：当前无服务器，跳过"); return
+        add_log("定时删除：无可删除服务器，跳过"); return
 
     add_log(f"定时删除：共 {len(servers)} 台服务器，开始删除...")
     deleted = 0
@@ -760,59 +1199,84 @@ def do_scheduled_delete_all():
     )
 
 
-def do_scheduled_create():
-    """定时创建服务器，补足至 schedule_create_count 台（已有足够则跳过）"""
+def do_scheduled_create(opts: Optional[Dict] = None):
+    """
+    创建服务器：把账户内服务器「补足到上限」（max_servers 是目标总数，不是每次新增数）。
+    - 优先复用已保护（锁定）且空闲的 Primary IP
+    - 按 server_types 的先后顺序作为型号优先级依次尝试
+    """
+    opts = opts or {}
     cfg = load_config()
-    add_log("🚀 ━━━ 定时任务：批量创建服务器 ━━━")
+    add_log("🚀 ━━━ 定时任务：创建服务器（补足至上限）━━━")
 
     hz = get_hetzner()
     if not hz:
-        add_log("定时创建：未配置 API Key", "warn"); return
+        add_log("定时创建：未配置 API Key", "warn"); return None
 
-    target_count = int(cfg.get("schedule_create_count", 3))
-    snapshot_id  = cfg.get("initial_snapshot_id", "")
-    server_types = cfg.get("server_types", ["cx43"])
-    ssh_keys     = cfg.get("ssh_keys", [])
-    location     = cfg.get("default_location", "nbg1")
-    prefix       = cfg.get("schedule_server_name_prefix", "hetzner-auto")
+    def _opt(key, default):
+        v = opts.get(key)
+        return default if v in (None, "") else v
+
+    max_servers = int(_opt("max_servers",
+                           cfg.get("schedule_max_servers", cfg.get("schedule_create_count", 3))) or 3)
+    snapshot_id = _opt("image_id", cfg.get("initial_snapshot_id", ""))
+    server_types = _opt("server_types", cfg.get("server_types", ["cx43"]))
+    if isinstance(server_types, str):
+        server_types = [server_types]
+    ssh_keys = _opt("ssh_keys", cfg.get("ssh_keys", []))
+    location = _opt("location", cfg.get("default_location", "nbg1"))
+    prefix = _opt("prefix", cfg.get("schedule_server_name_prefix", "hetzner-auto"))
+    use_locked = bool(opts.get("use_locked_ips", True))
+    lock_new = bool(opts.get("lock_new_ips", True))
 
     if not snapshot_id:
-        add_log("定时创建：未配置快照 ID，跳过", "warn"); return
+        add_log("定时创建：未配置快照 ID，跳过", "warn"); return None
 
-    # ── 检查当前已有服务器数量，按需补足 ──────────────────────────
+    # ── 计算需要补充的数量（上限语义）─────────────────────────────
     existing_servers = hz.get_servers()
-    existing_count   = len(existing_servers)
-    need_to_create   = target_count - existing_count
+    existing_count = len(existing_servers)
+    need = max_servers - existing_count
 
-    if need_to_create <= 0:
-        add_log(f"✅ 定时创建：当前已有 {existing_count} 台（目标 {target_count} 台），无需创建，跳过")
+    if need <= 0:
+        add_log(f"✅ 定时创建：当前已有 {existing_count} 台（上限 {max_servers} 台），无需创建")
         monitor_state["servers_cache"] = [enrich_server(s) for s in existing_servers]
         monitor_state["last_scheduled_create"] = datetime.now().isoformat()
-        return
+        return {"created": [], "failed": 0, "max_servers": max_servers}
 
-    add_log(f"定时创建：当前 {existing_count} 台，目标 {target_count} 台，需补充 {need_to_create} 台")
+    add_log(f"定时创建：当前 {existing_count} 台 / 上限 {max_servers} 台，需补充 {need} 台")
+
+    # ── 优先复用已保护的空闲 IP ──────────────────────────────────
+    free_locked = _free_locked_primary_ips(hz, location) if use_locked else []
+    if free_locked:
+        add_log(f"  🔒 发现 {len(free_locked)} 个已保护的空闲 IP，将优先复用")
 
     # 生成不与已有服务器名称冲突的候选名称
     existing_names = {s.get("name", "") for s in existing_servers}
     slots = []
     i = 1
-    while len(slots) < need_to_create:
+    while len(slots) < need and i <= 999:
         candidate = f"{prefix}-{i:02d}"
         if candidate not in existing_names:
             slots.append(candidate)
         i += 1
-        if i > 999:   # 防止极端情况死循环
-            break
 
     created_list = []
     failed = 0
 
     for idx, name in enumerate(slots):
-        add_log(f"  创建第 {idx+1}/{len(slots)} 台: {name} ...")
+        reuse = free_locked.pop(0) if free_locked else None
+        pip = reuse["id"] if reuse else None
+        tip = f"（复用 IP {reuse['ip']}）" if reuse else "（自动分配新 IP）"
+        add_log(f"  创建第 {idx+1}/{len(slots)} 台: {name} {tip}")
         result = hz.create_server_with_fallback(
-            name, server_types, int(snapshot_id), ssh_keys, location
+            name, server_types, int(snapshot_id), ssh_keys, location, primary_ipv4=pip
         )
         if result:
+            if lock_new and not reuse:
+                for pid in (result.get("primary_ipv4_id"), result.get("primary_ipv6_id")):
+                    if pid:
+                        _set_ip_lock(pid, True)
+            result["reused_ip"] = bool(reuse)
             created_list.append(result)
             add_log(f"  ✅ {name} → {result['ip']} [{result['server_type']}]")
         else:
@@ -827,7 +1291,7 @@ def do_scheduled_create():
         monitor_state["servers_cache"] = [enrich_server(s) for s in final]
 
     monitor_state["last_scheduled_create"] = datetime.now().isoformat()
-    add_log(f"定时创建完成：成功 {len(created_list)} / 失败 {failed} 台")
+    add_log(f"定时创建完成：成功 {len(created_list)} / 失败 {failed} 台（上限 {max_servers}）")
 
     # 同步 Vertex
     if created_list:
@@ -836,9 +1300,11 @@ def do_scheduled_create():
     send_telegram(
         f"<b>🚀 定时创建完成</b>\n"
         f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"已有 {existing_count} 台 → 补充 {len(created_list)} 台 / 失败 {failed} 台\n"
-        + "\n".join([f"✅ <code>{s['ip']}</code> [{s['server_type']}] {s['name']}" for s in created_list])
+        f"已有 {existing_count} 台 → 补充 {len(created_list)} 台 / 失败 {failed} 台（上限 {max_servers}）\n"
+        + "\n".join([f"✅ <code>{s['ip']}</code> [{s['server_type']}] {s['name']}"
+                     + ("（复用IP）" if s.get("reused_ip") else "") for s in created_list])
     )
+    return {"created": created_list, "failed": failed, "max_servers": max_servers}
 
 
 def _get_tz_now(cfg: Dict) -> datetime:
@@ -870,44 +1336,113 @@ def _get_tz_now(cfg: Dict) -> datetime:
     return datetime.now()
 
 
-# 调度去重 key 格式：  "delete:YYYY-MM-DD HH:MM"  /  "create:YYYY-MM-DD HH:MM"
-# 只要当天的「HH:MM 档」执行过就不再重复，即使调度器重启也靠 last_scheduled_* 的值校验
-def _already_ran_today(task: str, target_date, target_hhmm: str) -> bool:
-    """
-    判断 task（'delete' 或 'create'）在 target_date 的 target_hhmm 时刻是否已执行过。
-    校验依据：monitor_state['last_scheduled_{task}'] 记录的 ISO 时间字符串。
-    """
-    key = f"last_scheduled_{task}"
-    last_iso = monitor_state.get(key)
-    if not last_iso:
-        return False
+def _parse_hhmm(task: Dict) -> Tuple[int, int]:
     try:
-        last_dt = datetime.fromisoformat(last_iso)
-        # 同一天 & 同一 HH:MM 档已执行 → 去重
-        last_hhmm = last_dt.strftime("%H:%M")
-        return last_dt.date() == target_date and last_hhmm == target_hhmm
-    except Exception:
+        return int(task.get("hour", 0)) % 24, int(task.get("minute", 0)) % 60
+    except (TypeError, ValueError):
+        return 0, 0
+
+
+def _task_days(task: Dict) -> List[int]:
+    days = task.get("days") or [0, 1, 2, 3, 4, 5, 6]
+    try:
+        return sorted({int(d) % 7 for d in days})
+    except (TypeError, ValueError):
+        return [0, 1, 2, 3, 4, 5, 6]
+
+
+def _task_due(task: Dict, now: datetime, last_run_iso: Optional[str]) -> bool:
+    """判断任务此刻是否应当触发（含去重）。"""
+    if task.get("mode") == "interval":
+        try:
+            interval = max(1, int(task.get("interval_minutes", 60)))
+        except (TypeError, ValueError):
+            interval = 60
+        if not last_run_iso:
+            return True
+        try:
+            last = datetime.fromisoformat(last_run_iso)
+        except Exception:
+            return True
+        return (now - last).total_seconds() >= interval * 60
+
+    # daily 模式
+    if now.weekday() not in _task_days(task):
         return False
+    h, m = _parse_hhmm(task)
+    if now.hour != h or now.minute != m:
+        return False
+    if last_run_iso:
+        try:
+            last = datetime.fromisoformat(last_run_iso)
+            if last.date() == now.date() and last.hour == h and last.minute == m:
+                return False
+        except Exception:
+            pass
+    return True
+
+
+def _task_next_run(task: Dict, now: datetime, last_run_iso: Optional[str]) -> Optional[datetime]:
+    """计算任务下一次触发时间（用于前端展示）。"""
+    from datetime import timedelta
+    if task.get("mode") == "interval":
+        try:
+            interval = max(1, int(task.get("interval_minutes", 60)))
+        except (TypeError, ValueError):
+            interval = 60
+        if last_run_iso:
+            try:
+                nxt = datetime.fromisoformat(last_run_iso) + timedelta(minutes=interval)
+                return nxt if nxt > now else now
+            except Exception:
+                pass
+        return now
+    days = _task_days(task)
+    if not days:
+        return None
+    h, m = _parse_hhmm(task)
+    for delta in range(0, 8):
+        cand = (now + timedelta(days=delta)).replace(hour=h, minute=m, second=0, microsecond=0)
+        if cand < now:
+            continue
+        if cand.weekday() in days:
+            return cand
+    return None
+
+
+def execute_task(task: Dict):
+    """执行单个定时任务。"""
+    ttype = (task.get("type") or "").lower()
+    opts = task.get("options") or {}
+    if ttype == "create":
+        return do_scheduled_create(opts)
+    if ttype == "delete":
+        return do_scheduled_delete_all(opts)
+    if ttype == "sync":
+        sync_vertex_ips(f"定时同步任务 {task.get('id', '')}")
+        return {"synced": True}
+    add_log(f"未知定时任务类型: {ttype}", "warn")
+    return None
 
 
 def scheduler_loop(stop_event: threading.Event):
     """
-    每 30 秒唤醒一次，以指定时区的当前时间判断是否到达设定时刻。
+    通用任务调度器：按配置的 tick 周期唤醒，遍历 scheduled_tasks。
 
-    去重策略：
-      - 以「日期 + HH:MM」为单位，同一时刻当天只执行一次。
-      - 与调度器唤醒节奏无关——即使某次唤醒偏移了几秒也不会漏触发或重复触发。
-
-    时间匹配窗口：
-      - 当 now.minute == target_minute AND now.hour == target_hour 时触发。
-      - 不依赖秒级精度，30 秒唤醒间隔在同一分钟内至多触发一次（靠去重保证）。
+    触发规则：
+      - daily 模式：匹配 星期 + HH:MM，同一分钟当天只触发一次。
+      - interval 模式：距上次执行超过 interval_minutes 才触发。
+      - 所有状态放在 monitor_state['task_last_run']，重启后 interval 任务会立即补跑一次。
     """
     add_log("⏰ 定时任务调度器已启动")
-    from datetime import timedelta
 
     while not stop_event.is_set():
-        # 每 30 秒检查一次，确保在目标分钟内至少唤醒一次
-        stop_event.wait(timeout=30)
+        cfg = load_config()
+        try:
+            tick = max(5, int(cfg.get("scheduler_tick_seconds", 20) or 20))
+        except (TypeError, ValueError):
+            tick = 20
+        stop_event.wait(timeout=tick)
         if stop_event.is_set():
             break
 
@@ -915,45 +1450,34 @@ def scheduler_loop(stop_event: threading.Event):
         if not cfg.get("scheduled_tasks_enabled"):
             continue
 
-        now = _get_tz_now(cfg)          # 目标时区的当前时间
-        today = now.date()
-        now_hhmm = now.strftime("%H:%M")
+        now = _get_tz_now(cfg)
+        for task in (cfg.get("scheduled_tasks") or []):
+            if not task.get("enabled"):
+                continue
+            tid = task.get("id") or task.get("type")
+            last_iso = monitor_state["task_last_run"].get(tid)
+            try:
+                nxt = _task_next_run(task, now, last_iso)
+                monitor_state["task_next_run"][tid] = nxt.isoformat() if nxt else None
+            except Exception:
+                monitor_state["task_next_run"][tid] = None
 
-        # ── 定时删除 ──────────────────────────────────────────────
-        if cfg.get("schedule_delete_enabled"):
-            dh = int(cfg.get("schedule_delete_hour", 23))
-            dm = int(cfg.get("schedule_delete_minute", 0))
-            target_hhmm = f"{dh:02d}:{dm:02d}"
+            if not _task_due(task, now, last_iso):
+                continue
 
-            if now.hour == dh and now.minute == dm:
-                if not _already_ran_today("delete", today, target_hhmm):
-                    add_log(f"⏰ 触发定时删除（{cfg.get('schedule_timezone','本地')} {now_hhmm}）")
-                    # 先标记，防止任务执行中途调度器再次检查时重入
-                    monitor_state["last_scheduled_delete"] = now.isoformat()
-                    # 计算下次执行时间（次日同时刻）
-                    next_del = now.replace(hour=dh, minute=dm, second=0, microsecond=0) + timedelta(days=1)
-                    monitor_state["next_scheduled_delete"] = next_del.isoformat()
-                    try:
-                        do_scheduled_delete_all()
-                    except Exception as e:
-                        add_log(f"定时删除异常: {e}", "error")
+            # 先记录，避免任务执行期间被重复触发
+            monitor_state["task_last_run"][tid] = now.isoformat()
+            add_log(f"⏰ 触发定时任务 [{task.get('type')}] {tid}"
+                    f"（{cfg.get('schedule_timezone', '本地')} {now.strftime('%H:%M')}）")
+            try:
+                execute_task(task)
+            except Exception as e:
+                add_log(f"定时任务 {tid} 异常: {e}", "error")
 
-        # ── 定时创建 ──────────────────────────────────────────────
-        if cfg.get("schedule_create_enabled"):
-            ch = int(cfg.get("schedule_create_hour", 8))
-            cm = int(cfg.get("schedule_create_minute", 0))
-            target_hhmm = f"{ch:02d}:{cm:02d}"
-
-            if now.hour == ch and now.minute == cm:
-                if not _already_ran_today("create", today, target_hhmm):
-                    add_log(f"⏰ 触发定时创建（{cfg.get('schedule_timezone','本地')} {now_hhmm}）")
-                    monitor_state["last_scheduled_create"] = now.isoformat()
-                    next_cre = now.replace(hour=ch, minute=cm, second=0, microsecond=0) + timedelta(days=1)
-                    monitor_state["next_scheduled_create"] = next_cre.isoformat()
-                    try:
-                        do_scheduled_create()
-                    except Exception as e:
-                        add_log(f"定时创建异常: {e}", "error")
+            if task.get("type") == "delete":
+                monitor_state["last_scheduled_delete"] = now.isoformat()
+            elif task.get("type") == "create":
+                monitor_state["last_scheduled_create"] = now.isoformat()
 
     add_log("⏰ 定时任务调度器已停止")
 
@@ -1026,6 +1550,43 @@ def get_config():
         safe["vertex_cookies"] = ""
     return jsonify(safe)
 
+def _normalize_tasks(raw_tasks) -> List[Dict]:
+    """清洗前端提交的任务列表，避免脏数据进入调度器。"""
+    out: List[Dict] = []
+    if not isinstance(raw_tasks, list):
+        return out
+    for t in raw_tasks:
+        if not isinstance(t, dict):
+            continue
+        ttype = str(t.get("type", "")).lower()
+        if ttype not in VALID_TASK_TYPES:
+            continue
+        try:
+            hour = max(0, min(23, int(t.get("hour", 0))))
+            minute = max(0, min(59, int(t.get("minute", 0))))
+            interval = max(1, int(t.get("interval_minutes", 60)))
+        except (TypeError, ValueError):
+            hour, minute, interval = 0, 0, 60
+        try:
+            days = sorted({max(0, min(6, int(d))) for d in (t.get("days") or [0, 1, 2, 3, 4, 5, 6])})
+        except (TypeError, ValueError):
+            days = [0, 1, 2, 3, 4, 5, 6]
+        if not days:
+            days = [0, 1, 2, 3, 4, 5, 6]
+        out.append({
+            "id": t.get("id") or _new_task_id(),
+            "type": ttype,
+            "enabled": bool(t.get("enabled", False)),
+            "mode": "interval" if t.get("mode") == "interval" else "daily",
+            "hour": hour,
+            "minute": minute,
+            "days": days,
+            "interval_minutes": interval,
+            "options": t.get("options") if isinstance(t.get("options"), dict) else {},
+        })
+    return out
+
+
 @app.route("/api/config", methods=["POST"])
 @require_auth
 def update_config():
@@ -1037,7 +1598,15 @@ def update_config():
             if k in sensitive and data[k] == "":
                 continue
             cfg[k] = data[k]
+    if "scheduled_tasks" in data:
+        cfg["scheduled_tasks"] = _normalize_tasks(data.get("scheduled_tasks"))
     save_config(cfg)
+
+    # Vertex 凭据变更 → 重建 Cookie 管理器
+    if any(k in data for k in ("vertex_api_url", "vertex_username", "vertex_password",
+                               "vertex_password_md5", "vertex_cookie_check_interval")):
+        reset_vcm()
+
     add_log("⚙️ 配置已更新")
     # 若定时任务总开关变动，联动启停
     if "scheduled_tasks_enabled" in data:
@@ -1050,7 +1619,241 @@ def update_config():
 @app.route("/api/config/server-type-catalog")
 @require_auth
 def server_type_catalog():
-    return jsonify({"catalog": SERVER_TYPE_CATALOG})
+    if request.args.get("refresh") == "1" or not monitor_state.get("catalog"):
+        threading.Thread(target=lambda: _safe(refresh_catalog), daemon=True).start()
+    return jsonify({
+        "catalog": get_catalog(),
+        "locations": monitor_state.get("locations", []),
+        "pricing": monitor_state.get("pricing", {}),
+        "updated": monitor_state.get("catalog_updated"),
+        "source": "api" if monitor_state.get("catalog") else "builtin",
+    })
+
+# ─── 地区 / 价格 / 产品总览 ───────────────────────────────────────────────────
+@app.route("/api/locations")
+@require_auth
+def list_locations():
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    if not monitor_state.get("locations"):
+        refresh_catalog("拉取地区")
+    return jsonify({"locations": monitor_state.get("locations", [])})
+
+@app.route("/api/pricing")
+@require_auth
+def get_pricing_route():
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    if not monitor_state.get("pricing"):
+        refresh_catalog("拉取价格")
+    return jsonify({"pricing": monitor_state.get("pricing", {})})
+
+@app.route("/api/products")
+@require_auth
+def list_products():
+    """列出账户下各类产品，便于总览。"""
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    servers = hz.get_servers()
+    primary_ips = hz.get_primary_ips()
+    floating_ips = hz.get_floating_ips()
+    volumes = hz.get_volumes()
+    load_balancers = hz.get_load_balancers()
+    firewalls = hz.get_firewalls()
+    images = hz.get_images("snapshot")
+    ssh_keys = hz.get_ssh_keys()
+    return jsonify({
+        "counts": {
+            "servers": len(servers),
+            "primary_ips": len(primary_ips),
+            "floating_ips": len(floating_ips),
+            "volumes": len(volumes),
+            "load_balancers": len(load_balancers),
+            "firewalls": len(firewalls),
+            "snapshots": len(images),
+            "ssh_keys": len(ssh_keys),
+        },
+        "servers": [{"id": s["id"], "name": s["name"], "status": s.get("status"),
+                     "ipv4": ((s.get("public_net") or {}).get("ipv4") or {}).get("ip", ""),
+                     "server_type": (s.get("server_type") or {}).get("name", ""),
+                     "location": ((s.get("datacenter") or {}).get("location") or {}).get("name", "")}
+                    for s in servers],
+        "primary_ips": [{
+            "id": ip["id"], "name": ip.get("name"), "ip": ip.get("ip"), "type": ip.get("type"),
+            "location": (ip.get("location") or {}).get("name", ""),
+            "assignee_id": ip.get("assignee_id"), "assignee_type": ip.get("assignee_type"),
+            "auto_delete": ip.get("auto_delete", False),
+            "locked": bool((ip.get("protection") or {}).get("delete")) or not ip.get("auto_delete"),
+            "delete_protection": bool((ip.get("protection") or {}).get("delete")),
+            "blocked": ip.get("blocked", False),
+            "created": ip.get("created"),
+        } for ip in primary_ips],
+        "floating_ips": [{
+            "id": f["id"], "name": f.get("name"), "ip": f.get("ip"), "type": f.get("type"),
+            "location": (f.get("home_location") or {}).get("name", ""),
+            "server": f.get("server"),
+        } for f in floating_ips],
+        "volumes": [{
+            "id": v["id"], "name": v.get("name"), "size": v.get("size"),
+            "location": (v.get("location") or {}).get("name", ""),
+            "server": v.get("server"), "status": v.get("status"),
+        } for v in volumes],
+        "load_balancers": [{
+            "id": lb["id"], "name": lb.get("name"),
+            "ipv4": ((lb.get("public_net") or {}).get("ipv4") or {}).get("ip", ""),
+            "location": (lb.get("location") or {}).get("name", ""),
+            "type": (lb.get("load_balancer_type") or {}).get("name", ""),
+        } for lb in load_balancers],
+        "firewalls": [{"id": fw["id"], "name": fw.get("name"),
+                       "rules": len(fw.get("rules") or [])} for fw in firewalls],
+        "snapshots": [{"id": i["id"], "name": i.get("name") or i.get("description", ""),
+                       "disk_size": i.get("disk_size"), "created": i.get("created")}
+                      for i in images],
+        "ssh_keys": [{"id": k["id"], "name": k["name"]} for k in ssh_keys],
+    })
+
+# ─── Primary IP 管理（锁 IP / 批量创建 / 批量删除）────────────────────────────
+def _serialize_primary_ip(ip: Dict) -> Dict:
+    return {
+        "id": ip["id"], "name": ip.get("name"), "ip": ip.get("ip"), "type": ip.get("type"),
+        "location": (ip.get("location") or {}).get("name", ""),
+        "assignee_id": ip.get("assignee_id"), "assignee_type": ip.get("assignee_type"),
+        "auto_delete": ip.get("auto_delete", False),
+        "delete_protection": bool((ip.get("protection") or {}).get("delete")),
+        "locked": bool((ip.get("protection") or {}).get("delete")) or not ip.get("auto_delete"),
+        "blocked": ip.get("blocked", False),
+        "dns_ptr": ip.get("dns_ptr", []),
+        "created": ip.get("created"),
+        "labels": ip.get("labels", {}),
+    }
+
+@app.route("/api/primary-ips")
+@require_auth
+def list_primary_ips():
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    ips = hz.get_primary_ips()
+    # 服务器 id -> 名称 便于展示
+    server_names = {}
+    try:
+        server_names = {s["id"]: s.get("name", str(s["id"])) for s in hz.get_servers()}
+    except Exception:
+        pass
+    out = []
+    for ip in ips:
+        d = _serialize_primary_ip(ip)
+        d["assignee_name"] = server_names.get(ip.get("assignee_id"), "")
+        out.append(d)
+    return jsonify({"primary_ips": out, "count": len(out)})
+
+@app.route("/api/primary-ips/create", methods=["POST"])
+@require_auth
+def create_primary_ips():
+    data = request.json or {}
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    try:
+        count = max(1, min(int(data.get("count", 1)), 50))
+    except (TypeError, ValueError):
+        count = 1
+    ip_type = data.get("type", "ipv4")
+    location = data.get("location") or load_config().get("default_location", "nbg1")
+    prefix = (data.get("name_prefix") or f"ip-{location}").strip() or f"ip-{location}"
+    auto_delete = bool(data.get("auto_delete", False))
+    lock = bool(data.get("lock", True))
+    add_log(f"➕ 批量创建 {count} 个 {ip_type}（{location}，前缀 {prefix}）...")
+    results = []
+    for i in range(1, count + 1):
+        name = f"{prefix}-{i:02d}" if count > 1 else prefix
+        res = hz.create_primary_ip(name, ip_type, location=location, auto_delete=auto_delete)
+        if res.get("ok") and lock:
+            ok_l, _ = _set_ip_lock(res["id"], True)
+            res["locked"] = ok_l
+        results.append(res)
+        if res.get("ok"):
+            add_log(f"  ✅ {name} → {res.get('ip')}")
+        else:
+            add_log(f"  ❌ {name}: {res.get('error')}", "error")
+        time.sleep(0.4)
+    ok_count = sum(1 for r in results if r.get("ok"))
+    return jsonify({"success": True, "results": results,
+                    "created": ok_count, "failed": len(results) - ok_count})
+
+@app.route("/api/primary-ips/delete", methods=["POST"])
+@require_auth
+def delete_primary_ips():
+    data = request.json or {}
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    ids = data.get("ids") or ([data["id"]] if data.get("id") else [])
+    force = bool(data.get("force", False))
+    results = []
+    for raw in ids:
+        try:
+            ip_id = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if force:
+            hz.change_primary_ip_protection(ip_id, delete=False)
+        ok, msg = hz.delete_primary_ip(ip_id)
+        results.append({"id": ip_id, "ok": ok, "message": msg})
+        add_log(f"  {'🗑️' if ok else '❌'} 删除 IP #{ip_id}: {'成功' if ok else msg}",
+                "info" if ok else "error")
+    ok_count = sum(1 for r in results if r.get("ok"))
+    return jsonify({"success": True, "results": results,
+                    "deleted": ok_count, "failed": len(results) - ok_count})
+
+@app.route("/api/primary-ips/<int:ip_id>/lock", methods=["POST"])
+@require_auth
+def lock_primary_ip(ip_id):
+    data = request.json or {}
+    locked = bool(data.get("locked", True))
+    ok, msg = _set_ip_lock(ip_id, locked)
+    if ok:
+        add_log(f"🔒 IP #{ip_id} {msg}")
+        return jsonify({"success": True, "message": msg})
+    return jsonify({"error": msg}), 400
+
+@app.route("/api/primary-ips/<int:ip_id>/assign", methods=["POST"])
+@require_auth
+def assign_primary_ip(ip_id):
+    data = request.json or {}
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    try:
+        server_id = int(data.get("server_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "请提供有效的服务器 ID"}), 400
+    ok, msg = hz.assign_primary_ip(ip_id, server_id)
+    if ok:
+        add_log(f"🔗 IP #{ip_id} 已分配给服务器 #{server_id}")
+        return jsonify({"success": True})
+    return jsonify({"error": msg}), 400
+
+@app.route("/api/primary-ips/<int:ip_id>/unassign", methods=["POST"])
+@require_auth
+def unassign_primary_ip(ip_id):
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    ok, msg = hz.unassign_primary_ip(ip_id)
+    if ok:
+        add_log(f"⛓️ IP #{ip_id} 已解绑")
+        return jsonify({"success": True})
+    return jsonify({"error": msg}), 400
+
+@app.route("/api/primary-ips/refresh-catalog", methods=["POST"])
+@require_auth
+def refresh_catalog_route():
+    ok = refresh_catalog("手动刷新")
+    return jsonify({"success": ok})
 
 # ─── Servers ──────────────────────────────────────────────────────────────────
 @app.route("/api/servers")
@@ -1062,9 +1865,22 @@ def list_servers():
         if hz:
             monitor_state["servers_cache"] = [enrich_server(s) for s in hz.get_servers()]
             monitor_state["last_check"] = datetime.now().isoformat()
-    return jsonify({"servers": monitor_state["servers_cache"],
+    # 标注 Primary IP 是否已锁定（重建时保留）
+    out = monitor_state["servers_cache"]
+    try:
+        hz = get_hetzner()
+        if hz and out:
+            ip_map = {ip["id"]: ip for ip in hz.get_primary_ips() if ip.get("id")}
+            for s in out:
+                v4 = ip_map.get(s.get("primary_ipv4_id"))
+                v6 = ip_map.get(s.get("primary_ipv6_id"))
+                s["ipv4_locked"] = bool(v4 and ((v4.get("protection") or {}).get("delete") or not v4.get("auto_delete")))
+                s["ipv6_locked"] = bool(v6 and ((v6.get("protection") or {}).get("delete") or not v6.get("auto_delete")))
+    except Exception:
+        pass
+    return jsonify({"servers": out,
                     "last_check": monitor_state["last_check"],
-                    "count": len(monitor_state["servers_cache"])})
+                    "count": len(out)})
 
 @app.route("/api/servers/<int:server_id>", methods=["DELETE"])
 @require_auth
@@ -1082,22 +1898,112 @@ def delete_server(server_id):
 @app.route("/api/servers/create", methods=["POST"])
 @require_auth
 def create_server():
+    """
+    手动创建服务器（支持批量 / 数量 / IP 分配策略 / 型号优先级）。
+
+    body:
+      count            创建数量
+      name / name_prefix
+      server_types     型号优先级数组（或 server_type 单个）
+      image_id, location, ssh_keys
+      ip_mode          auto | locked | manual
+      primary_ipv4_ids 手动指定时使用
+      lock_ip          创建后是否锁定新 IP
+    """
     data = request.json or {}
     hz = get_hetzner()
     if not hz:
         return jsonify({"error": "API Key 未配置"}), 400
     cfg = load_config()
+
     image_id = data.get("image_id") or cfg.get("initial_snapshot_id")
     if not image_id:
         return jsonify({"error": "未指定镜像 ID"}), 400
-    server_types = [data["server_type"]] if data.get("server_type") else cfg.get("server_types", ["cx43"])
-    name_raw = data.get("name", f"server-{int(time.time())}")
-    name = HetznerAPI.sanitize_name(name_raw)
-    location = data.get("location", cfg.get("default_location", "nbg1"))
-    result = hz.create_server_with_fallback(name, server_types, int(image_id),
-                                             data.get("ssh_keys", cfg.get("ssh_keys", [])), location)
-    if not result:
-        return jsonify({"error": "创建失败，所有型号无货"}), 500
+
+    try:
+        count = max(1, min(int(data.get("count", 1) or 1), 20))
+    except (TypeError, ValueError):
+        count = 1
+
+    if data.get("server_types"):
+        server_types = data["server_types"]
+    elif data.get("server_type"):
+        server_types = [data["server_type"]]
+    else:
+        server_types = cfg.get("server_types", ["cx43"])
+    if isinstance(server_types, str):
+        server_types = [server_types]
+
+    location = data.get("location") or cfg.get("default_location", "nbg1")
+    ssh_keys = data.get("ssh_keys", cfg.get("ssh_keys", []))
+    lock_ip = bool(data.get("lock_ip", True))
+    ip_mode = data.get("ip_mode") or ("manual" if data.get("primary_ipv4_id") else "auto")
+    name_raw = data.get("name") or data.get("name_prefix") or f"server-{int(time.time())}"
+
+    # ── 组装 IP 分配队列 ──
+    manual_ids: List[int] = []
+    for raw in (data.get("primary_ipv4_ids") or []):
+        try:
+            manual_ids.append(int(raw))
+        except (TypeError, ValueError):
+            pass
+    single = data.get("primary_ipv4_id")
+    if single and not manual_ids:
+        try:
+            manual_ids.append(int(single))
+        except (TypeError, ValueError):
+            pass
+
+    locked_pool: List[Dict] = []
+    if ip_mode == "locked":
+        locked_pool = _free_locked_primary_ips(hz, location)
+        add_log(f"🔒 IP 策略：优先复用 {len(locked_pool)} 个已保护的空闲 IP")
+    elif ip_mode == "manual":
+        add_log(f"🔒 IP 策略：手动指定 {len(manual_ids)} 个 IP")
+
+    add_log(f"➕ 手动创建 {count} 台服务器（型号优先级 {' → '.join(server_types)}，地区 {location}）")
+
+    pad = max(2, len(str(count)))
+    created, failed = [], 0
+
+    for i in range(count):
+        if count == 1:
+            name = HetznerAPI.sanitize_name(name_raw)
+        else:
+            name = HetznerAPI.sanitize_name(f"{name_raw}-{i + 1:0{pad}d}")
+
+        pip = None
+        reused = False
+        if i < len(manual_ids):
+            pip = manual_ids[i]
+        elif locked_pool:
+            reuse = locked_pool.pop(0)
+            pip = reuse["id"]
+            reused = True
+
+        tip = "（自动分配新 IP）"
+        if pip:
+            tip = f"（{'复用' if reused else '指定'} IP #{pip}）"
+        add_log(f"  创建第 {i + 1}/{count} 台: {name} {tip}")
+
+        result = hz.create_server_with_fallback(
+            name, server_types, int(image_id), ssh_keys, location, primary_ipv4=pip
+        )
+        if not result:
+            failed += 1
+            created.append({"name": name, "ok": False, "error": "所有型号均失败"})
+            add_log(f"  ❌ {name} 创建失败", "error")
+            continue
+
+        if lock_ip and not reused:
+            for pid in (result.get("primary_ipv4_id"), result.get("primary_ipv6_id")):
+                if pid:
+                    _set_ip_lock(pid, True)
+
+        result["ok"] = True
+        result["reused_ip"] = reused
+        created.append(result)
+        add_log(f"  ✅ {name} → {result['ip']} [{result['server_type']}]")
 
     # 刷新缓存
     time.sleep(2)
@@ -1105,10 +2011,32 @@ def create_server():
     if fresh:
         monitor_state["servers_cache"] = [enrich_server(s) for s in fresh]
 
-    # ── 修复：手动创建后立即同步 Vertex ──
-    sync_vertex_ips("手动创建服务器后")
+    if created:
+        sync_vertex_ips("手动创建服务器后")
 
-    return jsonify({"success": True, "server": result})
+    ok_count = sum(1 for c in created if c.get("ok"))
+    return jsonify({
+        "success": ok_count > 0,
+        "count": count,
+        "created": ok_count,
+        "failed": failed,
+        "servers": created,
+        # 兼容旧前端
+        "server": next((c for c in created if c.get("ok")), None),
+    })
+
+
+@app.route("/api/primary-ips/free-locked")
+@require_auth
+def list_free_locked_ips():
+    """列出已被保护且未分配的空闲 Primary IP（供创建服务器时优先复用）。"""
+    hz = get_hetzner()
+    if not hz:
+        return jsonify({"error": "API Key 未配置"}), 400
+    location = request.args.get("location") or None
+    ip_type = request.args.get("type") or "ipv4"
+    ips = _free_locked_primary_ips(hz, location, ip_type)
+    return jsonify({"primary_ips": ips, "count": len(ips)})
 
 @app.route("/api/servers/rebuild/<int:server_id>", methods=["POST"])
 @require_auth
@@ -1137,6 +2065,17 @@ def rebuild_server(server_id):
 
     add_log(f"🔄 手动重建 {old_name} ({old_ip})...")
 
+    try:
+        ip_map = {ip["id"]: ip for ip in hz.get_primary_ips() if ip.get("id")}
+    except Exception:
+        ip_map = {}
+    keep_v4, keep_v6 = _preserved_primary_ips(target, ip_map)
+    if keep_v4 or keep_v6:
+        for kid in (keep_v4, keep_v6):
+            if kid:
+                hz.update_primary_ip(kid, auto_delete=False)
+        add_log(f"  🔒 锁定 IP 保留：IPv4#{keep_v4} IPv6#{keep_v6}")
+
     add_log(f"  [1/2] 删除旧服务器 {old_name} (id={server_id})...")
     if not hz.delete_server(server_id):
         return jsonify({"error": "旧服务器删除失败，重建取消"}), 500
@@ -1145,7 +2084,8 @@ def rebuild_server(server_id):
     time.sleep(5)
 
     add_log(f"  [2/2] 创建新服务器 {old_name}...")
-    new_sv = hz.create_server_with_fallback(old_name, server_types, img_id, ssh_keys, location)
+    new_sv = hz.create_server_with_fallback(old_name, server_types, img_id, ssh_keys, location,
+                                            primary_ipv4=keep_v4, primary_ipv6=keep_v6)
     if not new_sv:
         return jsonify({"error": "旧服务器已删除，但新服务器创建失败，请手动创建"}), 500
 
@@ -1198,6 +2138,9 @@ def monitor_status():
         "last_scheduled_create": monitor_state["last_scheduled_create"],
         "next_scheduled_delete": monitor_state["next_scheduled_delete"],
         "next_scheduled_create": monitor_state["next_scheduled_create"],
+        # 通用任务运行状态
+        "task_last_run": monitor_state["task_last_run"],
+        "task_next_run": monitor_state["task_next_run"],
     })
 
 @app.route("/api/monitor/start", methods=["POST"])
@@ -1240,16 +2183,33 @@ def get_logs():
 @app.route("/api/scheduler/trigger-delete", methods=["POST"])
 @require_auth
 def trigger_delete():
-    """手动立即触发定时删除"""
-    threading.Thread(target=lambda: _safe(do_scheduled_delete_all), daemon=True).start()
+    """手动立即触发定时删除（可带 only_prefix 选项）"""
+    opts = (request.json or {}).get("options") or {}
+    threading.Thread(target=lambda: _safe(lambda: do_scheduled_delete_all(opts)), daemon=True).start()
     return jsonify({"success": True, "message": "定时删除任务已触发"})
 
 @app.route("/api/scheduler/trigger-create", methods=["POST"])
 @require_auth
 def trigger_create():
-    """手动立即触发定时创建"""
-    threading.Thread(target=lambda: _safe(do_scheduled_create), daemon=True).start()
+    """手动立即触发定时创建（可带 options：max_servers / prefix 等）"""
+    opts = (request.json or {}).get("options") or {}
+    threading.Thread(target=lambda: _safe(lambda: do_scheduled_create(opts)), daemon=True).start()
     return jsonify({"success": True, "message": "定时创建任务已触发"})
+
+@app.route("/api/scheduler/run-task", methods=["POST"])
+@require_auth
+def run_task_now():
+    """按任务对象或任务 id 立即执行一次通用任务。"""
+    data = request.json or {}
+    task = data.get("task")
+    if not task:
+        tid = data.get("id")
+        cfg = load_config()
+        task = next((t for t in (cfg.get("scheduled_tasks") or []) if t.get("id") == tid), None)
+    if not task or not task.get("type"):
+        return jsonify({"error": "任务不存在"}), 404
+    threading.Thread(target=lambda: _safe(lambda: execute_task(task)), daemon=True).start()
+    return jsonify({"success": True, "message": f"已触发任务 [{task.get('type')}] {task.get('id', '')}"})
 
 # ─── Vertex ───────────────────────────────────────────────────────────────────
 @app.route("/api/vertex/test", methods=["POST"])
@@ -1346,6 +2306,10 @@ if __name__ == "__main__":
     os.makedirs("static", exist_ok=True)
     port = int(os.getenv("PORT", 8080))
     logger.info(f"🚀 Hetzner Web Manager on :{port}")
+
+    # 启动时从 Hetzner API 拉取型号 / 价格 / 地区（后台，不阻塞启动）
+    threading.Thread(target=lambda: _safe(lambda: refresh_catalog("启动时")),
+                     daemon=True, name="catalog-init").start()
 
     # 若配置了定时任务总开关，启动时自动启动调度器
     cfg = load_config()

@@ -15,7 +15,7 @@
   "work_end_minute": 30,
   "telegram_bot_token": "",
   "telegram_chat_id": "",
-  "web_password": "change-me",
+  "web_password": "admin123",
   "auto_rebuild_enabled": true,
   "rebuild_schedule_enabled": false,
   "default_location": "nbg1",
@@ -36,5 +36,59 @@
   "schedule_create_hour": 13,
   "schedule_create_minute": 50,
   "schedule_create_count": 3,
-  "schedule_server_name_prefix": "hetzner-auto"
+  "schedule_server_name_prefix": "hetzner-auto",
+  "schedule_max_servers": 3,
+  "scheduler_tick_seconds": 20,
+  "scheduled_tasks": [
+    {
+      "id": "create-daily",
+      "type": "create",
+      "enabled": false,
+      "mode": "daily",
+      "hour": 13,
+      "minute": 50,
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "interval_minutes": 60,
+      "options": {
+        "max_servers": 3,
+        "prefix": "hetzner-auto",
+        "location": "nbg1",
+        "image_id": "",
+        "server_types": [
+          "cpx42",
+          "cpx32"
+        ],
+        "ssh_keys": [],
+        "use_locked_ips": true,
+        "lock_new_ips": true
+      }
+    },
+    {
+      "id": "delete-daily",
+      "type": "delete",
+      "enabled": false,
+      "mode": "daily",
+      "hour": 23,
+      "minute": 0,
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "interval_minutes": 1440,
+      "options": {}
+    }
+  ]
 }
