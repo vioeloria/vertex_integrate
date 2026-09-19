@@ -6,8 +6,8 @@
   "initial_snapshot_id": "",
   "ssh_keys": [],
   "server_types": [
-    "cpx42",
-    "cpx32"
+    "cx33",
+    "cx43"
   ],
   "enable_time_window": false,
   "work_start_hour": 8,
