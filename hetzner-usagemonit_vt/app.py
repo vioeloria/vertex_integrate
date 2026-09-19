@@ -110,6 +110,7 @@ DEFAULT_CONFIG = {
     "schedule_max_servers": 3,              # 定时创建的目标/上限台数（补足至此数）
     "scheduled_tasks": [],                  # 通用任务列表，见 _default_tasks_from_legacy
     "scheduler_tick_seconds": 20,           # 调度器检查间隔（秒）
+    "schedule_retry_interval_minutes": 5,   # 指定型号缺货时的重试间隔（分钟）
 }
 
 
@@ -170,10 +171,9 @@ def _default_tasks_from_legacy(cfg: Dict) -> List[Dict]:
                 "prefix": cfg.get("schedule_server_name_prefix", "hetzner-auto"),
                 "location": cfg.get("default_location", "nbg1"),
                 "image_id": cfg.get("initial_snapshot_id", ""),
-                "server_types": list(cfg.get("server_types", []) or []),
                 "ssh_keys": list(cfg.get("ssh_keys", []) or []),
                 "use_locked_ips": True,
-                "lock_new_ips": True,
+                "lock_new_ips": False,
             },
         },
         {
@@ -218,6 +218,9 @@ monitor_state = {
     # 通用任务运行状态： {task_id: iso时间}
     "task_last_run": {},
     "task_next_run": {},
+    # 创建任务缺货重试队列
+    "retry_queue": [],
+    "retry_lock": threading.Lock(),
 }
 
 
@@ -1220,17 +1223,22 @@ def do_scheduled_create(opts: Optional[Dict] = None):
     max_servers = int(_opt("max_servers",
                            cfg.get("schedule_max_servers", cfg.get("schedule_create_count", 3))) or 3)
     snapshot_id = _opt("image_id", cfg.get("initial_snapshot_id", ""))
-    server_types = _opt("server_types", cfg.get("server_types", ["cx43"]))
+    # 型号严格取「监控配置」里的优先级，绝不使用任务级的历史快照，
+    # 也绝不创建配置以外的机器（例如配置 cx43/cx33 就不会创建 cpx42）。
+    server_types = list(cfg.get("server_types") or [])
     if isinstance(server_types, str):
         server_types = [server_types]
     ssh_keys = _opt("ssh_keys", cfg.get("ssh_keys", []))
     location = _opt("location", cfg.get("default_location", "nbg1"))
     prefix = _opt("prefix", cfg.get("schedule_server_name_prefix", "hetzner-auto"))
-    use_locked = bool(opts.get("use_locked_ips", True))
-    lock_new = bool(opts.get("lock_new_ips", True))
+    use_locked = bool(opts.get("use_locked_ips", True))   # 有锁定的空闲 IP 就优先复用
+    lock_new = bool(opts.get("lock_new_ips", False))      # 默认不额外锁定
 
     if not snapshot_id:
         add_log("定时创建：未配置快照 ID，跳过", "warn"); return None
+    if not server_types:
+        add_log("定时创建：监控配置未设置任何型号，跳过（不会创建配置以外的机器）", "warn")
+        return None
 
     # ── 计算需要补充的数量（上限语义）─────────────────────────────
     existing_servers = hz.get_servers()
@@ -1241,9 +1249,10 @@ def do_scheduled_create(opts: Optional[Dict] = None):
         add_log(f"✅ 定时创建：当前已有 {existing_count} 台（上限 {max_servers} 台），无需创建")
         monitor_state["servers_cache"] = [enrich_server(s) for s in existing_servers]
         monitor_state["last_scheduled_create"] = datetime.now().isoformat()
-        return {"created": [], "failed": 0, "max_servers": max_servers}
+        return {"created": [], "failed": 0, "max_servers": max_servers, "shortfall": 0}
 
     add_log(f"定时创建：当前 {existing_count} 台 / 上限 {max_servers} 台，需补充 {need} 台")
+    add_log(f"  指定型号优先级：{' → '.join(server_types)}（仅创建这些型号）")
 
     # ── 优先复用已保护的空闲 IP ──────────────────────────────────
     free_locked = _free_locked_primary_ips(hz, location) if use_locked else []
@@ -1291,7 +1300,9 @@ def do_scheduled_create(opts: Optional[Dict] = None):
         monitor_state["servers_cache"] = [enrich_server(s) for s in final]
 
     monitor_state["last_scheduled_create"] = datetime.now().isoformat()
-    add_log(f"定时创建完成：成功 {len(created_list)} / 失败 {failed} 台（上限 {max_servers}）")
+    shortfall = max(0, need - len(created_list))
+    add_log(f"定时创建完成：成功 {len(created_list)} / 失败 {failed} 台（上限 {max_servers}）"
+            + (f"，仍有 {shortfall} 台待重试" if shortfall else ""))
 
     # 同步 Vertex
     if created_list:
@@ -1304,7 +1315,8 @@ def do_scheduled_create(opts: Optional[Dict] = None):
         + "\n".join([f"✅ <code>{s['ip']}</code> [{s['server_type']}] {s['name']}"
                      + ("（复用IP）" if s.get("reused_ip") else "") for s in created_list])
     )
-    return {"created": created_list, "failed": failed, "max_servers": max_servers}
+    return {"created": created_list, "failed": failed, "max_servers": max_servers,
+            "shortfall": shortfall}
 
 
 def _get_tz_now(cfg: Dict) -> datetime:
@@ -1410,13 +1422,97 @@ def _task_next_run(task: Dict, now: datetime, last_run_iso: Optional[str]) -> Op
     return None
 
 
+def _retry_interval_minutes(cfg: Dict) -> int:
+    try:
+        return max(1, int(cfg.get("schedule_retry_interval_minutes", 5) or 5))
+    except (TypeError, ValueError):
+        return 5
+
+
+def _clear_retry(task_id: str):
+    with monitor_state["retry_lock"]:
+        monitor_state["retry_queue"] = [
+            x for x in monitor_state["retry_queue"] if x.get("task_id") != task_id
+        ]
+
+
+def _enqueue_retry(task: Dict, result: Dict, cfg: Dict):
+    """指定型号缺货时，登记一个 N 分钟后自动重试的条目。"""
+    from datetime import timedelta
+    task_id = task.get("id") or task.get("type")
+    interval = _retry_interval_minutes(cfg)
+    now = _get_tz_now(cfg)
+    entry = {
+        "task_id": task_id,
+        "options": dict(task.get("options") or {}),
+        "remaining": int(result.get("shortfall", 0)),
+        "attempts": 0,
+        "next_at": (now + timedelta(minutes=interval)).isoformat(),
+    }
+    with monitor_state["retry_lock"]:
+        monitor_state["retry_queue"] = [
+            x for x in monitor_state["retry_queue"] if x.get("task_id") != task_id
+        ] + [entry]
+    add_log(f"⏳ 指定型号缺货，{interval} 分钟后自动重试（剩余 {entry['remaining']} 台，仅重试指定型号）", "warn")
+
+
+def _process_retries(cfg: Dict):
+    """处理创建任务的重试队列（只重试指定型号，绝不创建配置以外的机器）。"""
+    from datetime import timedelta
+    now = _get_tz_now(cfg)
+    interval = _retry_interval_minutes(cfg)
+    tasks = {t.get("id"): t for t in (cfg.get("scheduled_tasks") or [])}
+    with monitor_state["retry_lock"]:
+        queue = list(monitor_state["retry_queue"])
+
+    for item in queue:
+        task_id = item.get("task_id")
+        task = tasks.get(task_id)
+        if not task or not task.get("enabled"):
+            _clear_retry(task_id)
+            continue
+        try:
+            next_at = datetime.fromisoformat(item.get("next_at") or "")
+        except Exception:
+            next_at = now
+        if now < next_at:
+            continue
+
+        add_log(f"🔁 定时创建缺货重试（{task_id}）…")
+        try:
+            result = do_scheduled_create(item.get("options") or {})
+        except Exception as e:
+            add_log(f"重试异常: {e}", "error")
+            result = None
+
+        if result is not None and result.get("shortfall", 0) <= 0:
+            _clear_retry(task_id)
+            add_log(f"✅ 缺货重试成功，创建任务已完成（{task_id}）")
+        else:
+            # 仍缺货或执行异常 → 继续排下一次重试
+            with monitor_state["retry_lock"]:
+                for x in monitor_state["retry_queue"]:
+                    if x.get("task_id") == task_id:
+                        x["remaining"] = int((result or {}).get("shortfall", x.get("remaining", 0)))
+                        x["attempts"] = int(x.get("attempts", 0)) + 1
+                        x["next_at"] = (now + timedelta(minutes=interval)).isoformat()
+
+
 def execute_task(task: Dict):
     """执行单个定时任务。"""
     ttype = (task.get("type") or "").lower()
     opts = task.get("options") or {}
     if ttype == "create":
-        return do_scheduled_create(opts)
+        result = do_scheduled_create(opts)
+        task_id = task.get("id") or "create"
+        # 有缺口 → 排重试；已补齐 → 取消该任务的待重试
+        if result is not None and result.get("shortfall", 0) <= 0:
+            _clear_retry(task_id)
+        else:
+            _enqueue_retry(task, result or {}, load_config())
+        return result
     if ttype == "delete":
+        _clear_retry(task.get("id") or "delete")
         return do_scheduled_delete_all(opts)
     if ttype == "sync":
         sync_vertex_ips(f"定时同步任务 {task.get('id', '')}")
@@ -1478,6 +1574,12 @@ def scheduler_loop(stop_event: threading.Event):
                 monitor_state["last_scheduled_delete"] = now.isoformat()
             elif task.get("type") == "create":
                 monitor_state["last_scheduled_create"] = now.isoformat()
+
+        # 处理缺货重试队列（每 N 分钟尝试一次，直到创建成功或任务被关闭）
+        try:
+            _process_retries(cfg)
+        except Exception as e:
+            add_log(f"重试队列处理异常: {e}", "error")
 
     add_log("⏰ 定时任务调度器已停止")
 
@@ -1925,18 +2027,25 @@ def create_server():
     except (TypeError, ValueError):
         count = 1
 
+    configured = list(cfg.get("server_types") or [])
+    if isinstance(configured, str):
+        configured = [configured]
     if data.get("server_types"):
-        server_types = data["server_types"]
+        requested = data["server_types"]
     elif data.get("server_type"):
-        server_types = [data["server_type"]]
+        requested = [data["server_type"]]
     else:
-        server_types = cfg.get("server_types", ["cx43"])
-    if isinstance(server_types, str):
-        server_types = [server_types]
+        requested = []
+    if isinstance(requested, str):
+        requested = [requested]
+    # 只允许监控配置内的型号，绝不放行配置以外的机器
+    server_types = [t for t in requested if t in configured] or configured
+    if not server_types:
+        return jsonify({"error": "监控配置未设置任何型号，请先在「监控配置」中添加"}), 400
 
     location = data.get("location") or cfg.get("default_location", "nbg1")
     ssh_keys = data.get("ssh_keys", cfg.get("ssh_keys", []))
-    lock_ip = bool(data.get("lock_ip", True))
+    lock_ip = bool(data.get("lock_ip", False))   # 默认不额外锁定
     ip_mode = data.get("ip_mode") or ("manual" if data.get("primary_ipv4_id") else "auto")
     name_raw = data.get("name") or data.get("name_prefix") or f"server-{int(time.time())}"
 
@@ -1955,12 +2064,15 @@ def create_server():
             pass
 
     locked_pool: List[Dict] = []
-    if ip_mode == "locked":
-        locked_pool = _free_locked_primary_ips(hz, location)
-        add_log(f"🔒 IP 策略：优先复用 {len(locked_pool)} 个已保护的空闲 IP")
-    elif ip_mode == "manual":
+    if ip_mode == "manual":
         add_log(f"🔒 IP 策略：手动指定 {len(manual_ids)} 个 IP")
+    else:
+        # auto / locked：有已保护的空闲 IP 就优先复用，但不额外加锁
+        locked_pool = _free_locked_primary_ips(hz, location)
+        if locked_pool:
+            add_log(f"🔒 IP 策略：发现 {len(locked_pool)} 个已保护的空闲 IP，优先复用")
 
+    add_log(f"🔐 创建后{'锁定新 IP' if lock_ip else '不锁定新 IP（新地址随服务器删除，已有锁定保持不变）'}")
     add_log(f"➕ 手动创建 {count} 台服务器（型号优先级 {' → '.join(server_types)}，地区 {location}）")
 
     pad = max(2, len(str(count)))
@@ -2141,6 +2253,13 @@ def monitor_status():
         # 通用任务运行状态
         "task_last_run": monitor_state["task_last_run"],
         "task_next_run": monitor_state["task_next_run"],
+        "task_retry": {
+            x.get("task_id"): {
+                "remaining": x.get("remaining", 0),
+                "attempts": x.get("attempts", 0),
+                "next_at": x.get("next_at"),
+            } for x in monitor_state["retry_queue"]
+        },
     })
 
 @app.route("/api/monitor/start", methods=["POST"])

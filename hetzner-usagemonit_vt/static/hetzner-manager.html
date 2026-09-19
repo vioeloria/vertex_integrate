@@ -876,6 +876,76 @@ body::before,body::after{display:none !important;}
   background:#f8fafc;border:1px solid var(--border-g);
 }
 .alloc-row .mut{color:var(--ink4);margin-left:auto;font-size:11px;}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   顶部导航（取消侧边栏）+ 内容居中 + 头像
+   ═══════════════════════════════════════════════════════════════════════ */
+#app{flex-direction:column;}
+.sidebar{
+  position:sticky; inset:auto; top:0; left:0; right:0;
+  width:100% !important; height:auto;
+  flex-direction:row; align-items:center; gap:6px;
+  padding:0 20px;
+  border-right:none; border-bottom:1px solid var(--border-g);
+  box-shadow:0 1px 2px rgba(16,18,23,.04);
+  pointer-events:auto !important;
+  transform:none !important;
+  z-index:100;
+}
+.sidebar.open{ transform:none !important; }
+.sb-head{ border-bottom:none; padding:14px 0; flex-shrink:0; }
+.sb-nav{
+  display:flex; flex-direction:row; align-items:center;
+  flex:1; padding:8px 6px; overflow-x:auto; gap:2px;
+  scrollbar-width:none;
+}
+.sb-nav::-webkit-scrollbar{ display:none; }
+.sb-section{ display:flex; align-items:center; gap:2px; margin-bottom:0; }
+.sb-cat{ display:none; }
+.nav-item{ padding:8px 13px; white-space:nowrap; }
+.nav-item.active::before{ display:none; }
+.sb-foot{ border-top:none; padding:0; display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.mon-status{ margin-bottom:0; padding:6px 12px; }
+.btn-logout{ width:auto; padding:7px 14px; white-space:nowrap; }
+
+/* 用户头像 */
+.user-chip{
+  display:flex; align-items:center; gap:8px;
+  padding:5px 12px 5px 6px; border-radius:99px;
+  background:#f6f7f9; border:1px solid var(--border-g);
+  flex-shrink:0;
+}
+.user-avatar{
+  width:28px; height:28px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; background:#e9eef8;
+}
+.user-name{ font-size:12px; font-weight:700; color:var(--ink2); }
+
+/* 主区：去掉侧边栏偏移，内容居中 */
+.main{
+  margin-left:0 !important;
+  padding:26px 20px 48px;
+  max-width:none;
+}
+@media(min-width:861px){ .main{ padding:34px 40px 56px; } }
+.main > .page{ max-width:1180px; margin:0 auto; }
+
+/* 移动端/拖动相关全部隐藏 */
+.hamburger,.sb-overlay,.sb-resize-handle,.sb-width-indicator{ display:none !important; }
+
+/* 极简：卡片更扁平、间距更舒展 */
+.gcard,.sv-card,.snap-card,.task-card,.ip-row,.prod-card{
+  border-radius:14px;
+}
+.ph{ margin-bottom:20px; }
+
+@media(max-width:860px){
+  .sidebar{ position:sticky; width:100% !important; transform:none !important; pointer-events:auto !important; }
+  .sb-foot .user-name{ display:none; }
+  .mon-status .mon-text{ display:none; }
+  .main{ padding:18px 14px 40px !important; }
+}
 </style>
 </head>
 <body>
@@ -965,6 +1035,10 @@ body::before,body::after{display:none !important;}
       </div>
     </div>
     <div class="sb-foot">
+      <div class="user-chip" title="当前用户">
+        <span class="user-avatar">👤</span>
+        <span class="user-name">管理员</span>
+      </div>
       <div class="mon-status">
         <div class="pulse-dot" id="mon-dot"></div>
         <span class="mon-text" id="mon-label">监控未启动</span>
@@ -1647,16 +1721,14 @@ async function openCreateModal(){
   try{ if(!S.primaryIPs.length){ var ir = await api('/primary-ips'); S.primaryIPs = ir.data.primary_ips||[]; } }catch(e){}
   var locs = (S.locations && S.locations.length) ? S.locations : [{name:cfg.default_location||'nbg1',description:'默认'}];
   var locOpts = locs.map(function(l){ return '<option value="'+l.name+'">'+l.name+' — '+escHtml(l.description||'')+'</option>'; }).join('');
-  var typeOpts = '<option value="">按监控配置的优先级</option>'
-    + types.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('')
-    + Object.keys(S.catalog).filter(function(k){ return types.indexOf(k)<0; })
-        .map(function(k){ return '<option value="'+k+'">'+k+'</option>'; }).join('');
+  // 只允许监控配置里的型号，绝不放行配置以外的机器
+  var typeOpts = '<option value="">按监控优先级（'+escHtml(types.join(' → ')||'未配置')+'）</option>'
+    + types.map(function(t){ return '<option value="'+t+'">仅 '+t+'</option>'; }).join('');
   var freeLocked = (S.primaryIPs||[]).filter(function(ip){ return ip.type==='ipv4' && !ip.assignee_id && ip.locked; });
   var freeAll = (S.primaryIPs||[]).filter(function(ip){ return ip.type==='ipv4' && !ip.assignee_id; });
   var ipOpts = freeAll.map(function(ip){ return '<option value="'+ip.id+'">'+ip.ip+' ('+escHtml(ip.name||ip.id)+')'+(ip.locked?' 🔒':'')+'</option>'; }).join('');
   var sshVal = (cfg.ssh_keys||[]).join(', ');
-  var prioText = types.length ? types.join(' → ') : '（未配置，将使用默认型号）';
-  var lockedSel = freeLocked.length ? ' selected' : '';
+  var prioText = types.length ? types.join(' → ') : '（未配置，请先到监控配置添加）';
   var html = ''
    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
    +   '<div class="fg"><label class="fl">创建数量</label><input class="inp" id="cr-count" type="number" min="1" max="20" value="1"></div>'
@@ -1671,12 +1743,11 @@ async function openCreateModal(){
    +   '<div class="fg"><label class="fl">SSH 密钥 IDs</label><input class="inp" id="cr-ssh" value="'+escHtml(sshVal)+'" placeholder="12345, 67890"><div class="fh">逗号分隔，留空用默认</div></div>'
    + '</div>'
    + '<div class="fg"><label class="fl">IPv4 分配方式</label><select class="inp" id="cr-ipmode" onchange="onCreateIpModeChange()">'
-   +   '<option value="auto">自动分配新 IP</option>'
-   +   '<option value="locked"'+lockedSel+'>优先复用已保护的空闲 IP（'+freeLocked.length+' 个可用）</option>'
+   +   '<option value="auto">自动：优先复用已保护的空闲 IP（'+freeLocked.length+' 个可用），否则新建</option>'
    +   '<option value="manual">手动指定 IP</option>'
-   + '</select><div class="fh">优先复用已被保护（锁定）的 IP，可让重建后的地址保持稳定</div></div>'
+   + '</select><div class="fh">有锁定的空闲 IP 会优先使用；不会额外锁定新 IP，也不会解锁已有 IP</div></div>'
    + '<div class="fg" id="cr-ipmanual" style="display:none;"><label class="fl">选择 IPv4（可多选）</label><select class="inp" id="cr-ips" multiple size="4" style="min-height:96px;">'+ipOpts+'</select><div class="fh">按住 Ctrl/Cmd 多选；数量与创建数量对应</div></div>'
-   + '<div class="tog-row"><div><div class="tog-lbl">锁定新 IP</div><div class="tog-desc">自动分配的新 IP 创建后开启删除保护，重建时保留</div></div><div class="tog-sw on" id="cr-lock" onclick="this.classList.toggle(\'on\')"></div></div>'
+   + '<div class="tog-row"><div><div class="tog-lbl">锁定新建 IP</div><div class="tog-desc">默认关闭：新地址随服务器删除；仅当你勾选后才开启删除保护，重建时保留。已有锁定不受影响</div></div><div class="tog-sw" id="cr-lock" onclick="this.classList.toggle(\'on\')"></div></div>'
    + '<div class="info-box" style="margin:14px 0 4px;font-size:11px;">✅ 创建完成后自动同步 Vertex 下载器 IP；结果会列出每台机器的 IP 分配情况。</div>'
    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">'
    +   '<button class="btn btn-base" onclick="closeModal()">取消</button>'
@@ -1764,6 +1835,11 @@ function buildScheduleShell(){
    +   '<label class="fl" style="margin:0;white-space:nowrap;">执行时区</label>'
    +   '<select class="inp" id="cfg-tz" style="max-width:280px;">'+TZ_OPTIONS+'</select>'
    +   '<span id="sched-summary" style="font-size:11px;color:var(--ink4);"></span>'
+   +   '<span style="display:flex;align-items:center;gap:6px;margin-left:auto;">'
+   +     '<label class="fl" style="margin:0;white-space:nowrap;">缺货重试间隔</label>'
+   +     '<input class="inp" id="cfg-retry" type="number" min="1" style="width:80px;">'
+   +     '<span style="font-size:11px;color:var(--ink3);">分钟</span>'
+   +   '</span>'
    + '</div>'
    + '<div style="margin-top:13px;padding:10px 14px;background:var(--sky);border-radius:10px;display:flex;gap:20px;flex-wrap:wrap;">'
    +   '<div style="font-size:11px;color:var(--ink3);">🕐 浏览器时间：<span id="srv-localtime" style="font-family:var(--mono);color:var(--ink);font-weight:600;">—</span></div>'
@@ -1789,6 +1865,8 @@ function loadScheduleCfg(){
     tz.value = saved;
   }
   setToggle('tog-sched-master', c.scheduled_tasks_enabled);
+  var retryEl = document.getElementById('cfg-retry');
+  if(retryEl) retryEl.value = c.schedule_retry_interval_minutes || 5;
   var srvEl = document.getElementById('srv-localtime');
   if(srvEl) srvEl.textContent = new Date().toLocaleString('zh-CN');
   renderTasks();
@@ -1832,7 +1910,11 @@ function taskCard(t,i){
   var opts = '';
   var o = t.options || {};
   if(t.type==='create'){
-    opts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+    var prio = (S.serverTypes||[]).join(' → ') || '（未在监控配置中设置）';
+    opts = '<div class="fg"><label class="fl">指定型号（只读，来自监控配置）</label>'
+      + '<input class="inp" value="'+escHtml(prio)+'" readonly style="background:#f8fafc;color:var(--ink3);">'
+      + '<div class="fh">只创建这些型号；缺货时按重试间隔自动重试，绝不创建配置以外的机器</div></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
       + '<div class="fg"><label class="fl">可创建服务器上限</label><input class="inp" type="number" min="1" value="'+(o.max_servers||3)+'" oninput="taskOpt('+i+',\'max_servers\',this.value,true)"><div class="fh">目标总数：不足补足，达到上限不再创建</div></div>'
       + '<div class="fg"><label class="fl">名称前缀</label><input class="inp" value="'+escHtml(o.prefix||'hetzner-auto')+'" oninput="taskOpt('+i+',\'prefix\',this.value)"></div>'
       + '</div>'
@@ -1840,8 +1922,8 @@ function taskCard(t,i){
       + '<div class="fg"><label class="fl">地区</label><input class="inp" value="'+escHtml(o.location||S.config.default_location||'nbg1')+'" oninput="taskOpt('+i+',\'location\',this.value)"></div>'
       + '<div class="fg"><label class="fl">镜像/快照 ID</label><input class="inp" value="'+escHtml(o.image_id||S.config.initial_snapshot_id||'')+'" oninput="taskOpt('+i+',\'image_id\',this.value)"></div>'
       + '</div>'
-      + '<div class="tog-row"><div><div class="tog-lbl">优先复用已保护的 IP</div><div class="tog-desc">创建时先占用已锁定且空闲的 IPv4</div></div><div class="tog-sw'+((o.use_locked_ips!==false)?' on':'')+'" onclick="taskOptToggle('+i+',\'use_locked_ips\')"></div></div>'
-      + '<div class="tog-row"><div><div class="tog-lbl">锁定新建 IP</div><div class="tog-desc">自动分配的新 IP 创建后开启删除保护</div></div><div class="tog-sw'+((o.lock_new_ips!==false)?' on':'')+'" onclick="taskOptToggle('+i+',\'lock_new_ips\')"></div></div>';
+      + '<div class="tog-row"><div><div class="tog-lbl">优先复用已保护的 IP</div><div class="tog-desc">有锁定且空闲的 IPv4 时优先使用，不额外加锁</div></div><div class="tog-sw'+((o.use_locked_ips!==false)?' on':'')+'" onclick="taskOptToggle('+i+',\'use_locked_ips\')"></div></div>'
+      + '<div class="tog-row"><div><div class="tog-lbl">锁定新建 IP</div><div class="tog-desc">默认关闭；仅手动开启后才会对新分配的 IP 加删除保护。已有锁定不会被取消</div></div><div class="tog-sw'+((o.lock_new_ips===true)?' on':'')+'" onclick="taskOptToggle('+i+',\'lock_new_ips\')"></div></div>';
   }else if(t.type==='delete'){
     opts = '<div class="fg"><label class="fl">仅删除名称前缀（可选）</label><input class="inp" placeholder="留空=删除全部" value="'+escHtml(o.only_prefix||'')+'" oninput="taskOpt('+i+',\'only_prefix\',this.value)"><div class="fh">留空将删除账户下所有服务器</div></div>';
   }
@@ -1905,7 +1987,7 @@ function doTaskAdd(type){
   if(type==='create') base.options = {max_servers:S.config.schedule_max_servers||3,
       prefix:S.config.schedule_server_name_prefix||'hetzner-auto',
       location:S.config.default_location||'nbg1', image_id:S.config.initial_snapshot_id||'',
-      use_locked_ips:true, lock_new_ips:true};
+      use_locked_ips:true, lock_new_ips:false};
   if(type==='delete') base.options = {only_prefix:''};
   ensureTasks().push(base);
   closeModal();
@@ -1940,7 +2022,10 @@ function refreshTaskStatus(){
     var tid = el.getAttribute('data-tid');
     var last = (S.taskStatus.last||{})[tid];
     var next = (S.taskStatus.next||{})[tid];
-    el.innerHTML = '上次: '+fmtTime(last)+'<br>下次: '+fmtTime(next);
+    var retry = (S.taskStatus.retry||{})[tid];
+    var html = '上次: '+fmtTime(last)+'<br>下次: '+fmtTime(next);
+    if(retry) html += '<br><span style="color:var(--amber);">⏳ 缺货重试中：剩 '+retry.remaining+' 台，下次 '+fmtTime(retry.next_at)+'（已试 '+retry.attempts+' 次）</span>';
+    el.innerHTML = html;
   });
 }
 function updateTimeline(){
@@ -1953,8 +2038,10 @@ function updateTimeline(){
 }
 async function saveSchedule(){
   var tz = (document.getElementById('cfg-tz')||{}).value || 'Asia/Shanghai';
+  var retry = parseInt((document.getElementById('cfg-retry')||{}).value) || 5;
   var body = {
     schedule_timezone: tz,
+    schedule_retry_interval_minutes: Math.max(1, retry),
     scheduled_tasks_enabled: !!S.config.scheduled_tasks_enabled,
     scheduled_tasks: ensureTasks()
   };
@@ -1970,7 +2057,7 @@ async function checkMonitor(){
   var r = await api('/monitor/status');
   var data = r.data || {};
   S.monitorRunning = data.running;
-  S.taskStatus = {last:data.task_last_run||{}, next:data.task_next_run||{}};
+  S.taskStatus = {last:data.task_last_run||{}, next:data.task_next_run||{}, retry:data.task_retry||{}};
   updateMonUI(data);
   updateSchedStatus(data);
   refreshTaskStatus();

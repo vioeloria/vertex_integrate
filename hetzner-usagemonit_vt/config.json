@@ -62,13 +62,9 @@
         "prefix": "hetzner-auto",
         "location": "nbg1",
         "image_id": "",
-        "server_types": [
-          "cpx42",
-          "cpx32"
-        ],
         "ssh_keys": [],
         "use_locked_ips": true,
-        "lock_new_ips": true
+        "lock_new_ips": false
       }
     },
     {
@@ -90,5 +86,6 @@
       "interval_minutes": 1440,
       "options": {}
     }
-  ]
+  ],
+  "schedule_retry_interval_minutes": 5
 }
