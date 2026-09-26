@@ -961,10 +961,53 @@ body::before,body::after{display:none !important;}
 .ph{ margin-bottom:20px; }
 
 @media(max-width:860px){
-  .sidebar{ position:sticky; width:100% !important; transform:none !important; pointer-events:auto !important; }
-  .sb-foot .user-name{ display:none; }
-  .mon-status .mon-text{ display:none; }
-  .main{ padding:18px 14px 40px !important; }
+  /* 移动端改为「汉堡按钮 + 左侧抽屉」，避免顶部导航被挤压/遮挡 */
+  .hamburger{ display:flex !important; z-index:65; }
+  .sb-overlay{ display:block !important; opacity:0; pointer-events:none; z-index:55; }
+  .sb-overlay.open{ opacity:1 !important; pointer-events:auto !important; }
+
+  .sidebar{
+    position:fixed !important; inset:0 auto 0 0 !important;
+    width:264px !important; max-width:82vw;
+    height:100vh !important;
+    flex-direction:column !important;
+    align-items:stretch !important; justify-content:flex-start !important;
+    gap:0 !important; padding:0 !important;
+    background:#fff;
+    border-right:1px solid var(--border-g);
+    border-bottom:none !important;
+    box-shadow:var(--shadow-float);
+    transform:translateX(-100%) !important;
+    transition:transform .25s cubic-bezier(.4,0,.2,1);
+    z-index:60;
+    overflow:hidden;
+    pointer-events:auto !important;
+  }
+  .sidebar.open{ transform:translateX(0) !important; }
+
+  .sb-head{ padding:20px 16px 14px !important; border-bottom:1px solid var(--border-g) !important; flex-shrink:0; }
+  .sb-nav{
+    display:block !important;
+    padding:12px 10px !important;
+    overflow-y:auto !important; overflow-x:hidden !important;
+    flex:1 1 auto !important;
+  }
+  .sb-section{ display:block !important; margin-bottom:16px !important; }
+  .sb-cat{ display:block !important; }
+  .nav-item{ padding:11px 12px !important; white-space:normal !important; font-size:14px; }
+  .nav-item.active::before{ display:block !important; }
+  .sb-foot{
+    display:flex !important; flex-wrap:wrap; gap:10px !important;
+    padding:12px 14px 22px !important;
+    border-top:1px solid var(--border-g) !important; flex-shrink:0;
+  }
+  .sb-foot .user-name{ display:inline !important; }
+  .mon-status{ padding:8px 12px !important; }
+  .mon-status .mon-text{ display:inline !important; }
+  .btn-logout{ width:100% !important; text-align:center; }
+
+  /* 顶部为固定汉堡按钮留出空间 */
+  .main{ padding:64px 14px 40px !important; }
 }
 </style>
 </head>
