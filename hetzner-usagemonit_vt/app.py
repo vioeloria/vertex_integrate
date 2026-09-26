@@ -238,6 +238,8 @@ class HetznerAPI:
 
     def __init__(self, api_key: str):
         self.headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        # 最近一次创建失败的结构化原因：{"code","message","status","retryable"}
+        self.last_create_error: Optional[Dict] = None
 
     def _get(self, path: str, params: dict = None):
         r = requests.get(f"{self.BASE}{path}", headers=self.headers, params=params, timeout=15)
@@ -262,6 +264,15 @@ class HetznerAPI:
             return self._get("/images", {"type": image_type, "include_deprecated": "false"}).get("images", [])
         except Exception as e:
             add_log(f"获取镜像失败: {e}", "error"); return []
+
+    def image_exists(self, image_id) -> bool:
+        """检查某个镜像/快照 ID 在当前账户下是否仍然可用。"""
+        try:
+            r = requests.get(f"{self.BASE}/images/{int(image_id)}",
+                             headers=self.headers, timeout=15)
+            return r.status_code == 200
+        except Exception:
+            return False
 
     def get_ssh_keys(self) -> List[Dict]:
         try:
@@ -463,9 +474,47 @@ class HetznerAPI:
             add_log(f"  创建失败 [{server_type}] code={err_code}: {err_msg}", "error")
             if err_code in ("uniqueness_error", "invalid_input") and "name" in err_msg.lower():
                 return {"_name_conflict": True}
+            self.last_create_error = {
+                "code": err_code,
+                "message": err_msg,
+                "status": r.status_code,
+                "retryable": self.is_retryable_create_error(err_code, err_msg),
+            }
             return None
         except Exception as e:
-            add_log(f"  创建异常: {e}", "error"); return None
+            add_log(f"  创建异常: {e}", "error")
+            self.last_create_error = {
+                "code": "exception", "message": str(e), "status": 0, "retryable": True,
+            }
+            return None
+
+    @staticmethod
+    def is_retryable_create_error(code: str, message: str) -> bool:
+        """
+        区分「库存/容量不足」（可重试）与「参数错误」（不可重试）。
+        - 无货/容量/临时性错误 → True（每 N 分钟重试）
+        - invalid_input（如 image not found）/ 鉴权 / 资源不存在 → False（停止重试并告警）
+        """
+        code = (code or "").lower()
+        msg = (message or "").lower()
+
+        # 明确不可重试：参数、鉴权、资源不存在
+        if code in ("invalid_input", "unauthorized", "forbidden", "not_found",
+                    "uniqueness_error", "invalid_request"):
+            return False
+        if any(k in msg for k in ("image not found", "invalid image", "snapshot not found",
+                                  "not found", "invalid", "unauthorized", "forbidden",
+                                  "no ssh key", "ssh key not found")):
+            return False
+        # 明确可重试：库存/容量/限流/临时
+        if code in ("resource_unavailable", "unavailable", "conflict",
+                    "rate_limit_exceeded", "service_error", "internal_error"):
+            return True
+        if any(k in msg for k in ("no available", "sold out", "capacity", "out of stock",
+                                  "unavailable", "insufficient", "temporarily")):
+            return True
+        # 未知错误：保守认为可重试
+        return True
 
     def create_server_with_fallback(self, name: str, server_types: List[str],
                                     image_id: int, ssh_keys: List,
@@ -474,6 +523,7 @@ class HetznerAPI:
                                     primary_ipv6: Optional[int] = None) -> Optional[Dict]:
         base_name = self.sanitize_name(name)
         fallback_name = self.sanitize_name(f"{base_name}-{int(time.time()) % 100000}")
+        self.last_create_error = None
 
         for st in server_types:
             add_log(f"  → 尝试型号 [{st}] name={base_name} ...")
@@ -492,10 +542,20 @@ class HetznerAPI:
                     add_log(f"  ✅ [{st}] 备用名创建成功: {result2['ip']}")
                     return result2
                 add_log(f"  ✗ [{st}] 备用名仍失败，尝试下一型号...", "warn")
-            else:
-                add_log(f"  ✗ [{st}] 无货或其他错误，尝试下一个...", "warn")
+                continue
 
-        add_log("❌ 所有型号均失败", "error")
+            err = self.last_create_error or {}
+            if not err.get("retryable", True):
+                # 参数/配置错误（如 image not found）：换型号也没用，直接终止
+                add_log(f"  ⛔ [{st}] 参数/配置错误，不再尝试其它型号：{err.get('message')}", "error")
+                break
+            add_log(f"  ✗ [{st}] 不可用（{err.get('code') or '未知'}: {err.get('message') or '无货'}），尝试下一个...", "warn")
+
+        err = self.last_create_error or {}
+        if not err.get("retryable", True):
+            add_log(f"❌ 创建终止：{err.get('code')}: {err.get('message')}", "error")
+        else:
+            add_log("❌ 所有指定型号当前均不可用（可能无货），稍后重试", "error")
         return None
 
     def delete_server(self, server_id: int) -> bool:
@@ -684,6 +744,62 @@ def _free_locked_primary_ips(hz: "HetznerAPI", location: Optional[str] = None,
         out.append({"id": ip["id"], "ip": ip.get("ip"), "name": ip.get("name"),
                     "location": (ip.get("location") or {}).get("name", "")})
     return out
+
+
+# ─── 镜像/快照解析（自动修复失效的快照 ID）────────────────────────────────────
+def resolve_image_id(hz: "HetznerAPI", preferred) -> Optional[int]:
+    """
+    返回一个确实可用的镜像 ID。
+
+    背景：快照重建后 ID 会变化，若配置里仍保存旧 ID，创建服务器会报
+    `invalid_input: image not found`（手动创建时用户输入的是新 ID 所以能成功）。
+    这里优先使用配置的 ID，失效时自动回退到账户内最新的一张快照。
+    """
+    if not hz:
+        return None
+    try:
+        pref = int(preferred) if preferred not in (None, "") else None
+    except (TypeError, ValueError):
+        pref = None
+
+    if pref and hz.image_exists(pref):
+        return pref
+
+    imgs = hz.get_images("snapshot")
+    if imgs:
+        newest = sorted(imgs, key=lambda i: i.get("created") or "", reverse=True)[0]
+        new_id = int(newest["id"])
+        if pref and pref != new_id:
+            add_log(f"⚠️ 配置的快照 ID {pref} 已失效，自动改用最新快照 {new_id}"
+                    f"（{newest.get('description') or newest.get('name') or '未命名'}）", "warn")
+        return new_id
+
+    if pref:
+        add_log(f"⚠️ 账户内没有可用快照，仍尝试使用配置的 ID {pref}", "warn")
+    return pref
+
+
+def _heal_image_config(resolved: Optional[int]):
+    """把解析出的可用快照 ID 写回配置和所有创建任务，避免下次再次失效。"""
+    if not resolved:
+        return
+    try:
+        cfg = load_config()
+        changed = False
+        if str(cfg.get("initial_snapshot_id") or "") != str(resolved):
+            cfg["initial_snapshot_id"] = str(resolved)
+            changed = True
+        for t in (cfg.get("scheduled_tasks") or []):
+            if (t.get("type") or "").lower() == "create":
+                opts = t.setdefault("options", {})
+                if str(opts.get("image_id") or "") != str(resolved):
+                    opts["image_id"] = str(resolved)
+                    changed = True
+        if changed:
+            save_config(cfg)
+            add_log(f"🩹 已自动更新镜像/快照 ID → {resolved}")
+    except Exception as e:
+        logger.error(f"heal image config error: {e}")
 
 
 # ─── 全局 Cookie 管理器单例 ────────────────────────────────────────────────────
@@ -1048,7 +1164,10 @@ def do_check_and_rebuild():
     auto_rebuild = cfg.get("auto_rebuild_enabled", True)
     server_types = cfg.get("server_types", ["cx43"])
     ssh_keys = cfg.get("ssh_keys", [])
-    snapshot_id = cfg.get("initial_snapshot_id", "")
+    # 轮询重建同样需要有效镜像：配置失效时自动回退到最新快照并写回配置
+    snapshot_id = resolve_image_id(hz, cfg.get("initial_snapshot_id", ""))
+    if snapshot_id:
+        _heal_image_config(snapshot_id)
     location = cfg.get("default_location", "nbg1")
 
     high_traffic = [s for s in enriched if s["usage_ratio"] >= threshold]
@@ -1234,11 +1353,19 @@ def do_scheduled_create(opts: Optional[Dict] = None):
     use_locked = bool(opts.get("use_locked_ips", True))   # 有锁定的空闲 IP 就优先复用
     lock_new = bool(opts.get("lock_new_ips", False))      # 默认不额外锁定
 
-    if not snapshot_id:
-        add_log("定时创建：未配置快照 ID，跳过", "warn"); return None
     if not server_types:
         add_log("定时创建：监控配置未设置任何型号，跳过（不会创建配置以外的机器）", "warn")
         return None
+
+    # 解析可用快照：配置的 ID 失效（快照重建后 ID 会变）时自动回退到账户内最新快照，
+    # 并把结果写回配置，这样定时/轮询创建也能像手动创建一样始终拿到有效镜像。
+    snapshot_id = resolve_image_id(hz, snapshot_id)
+    if not snapshot_id:
+        add_log("定时创建：账户内没有可用快照，无法创建（请先创建快照）", "error")
+        return {"created": [], "failed": 0, "max_servers": max_servers,
+                "shortfall": 0, "retryable": False,
+                "fatal_error": {"code": "no_snapshot", "message": "账户内没有可用快照"}}
+    _heal_image_config(snapshot_id)
 
     # ── 计算需要补充的数量（上限语义）─────────────────────────────
     existing_servers = hz.get_servers()
@@ -1249,10 +1376,12 @@ def do_scheduled_create(opts: Optional[Dict] = None):
         add_log(f"✅ 定时创建：当前已有 {existing_count} 台（上限 {max_servers} 台），无需创建")
         monitor_state["servers_cache"] = [enrich_server(s) for s in existing_servers]
         monitor_state["last_scheduled_create"] = datetime.now().isoformat()
-        return {"created": [], "failed": 0, "max_servers": max_servers, "shortfall": 0}
+        return {"created": [], "failed": 0, "max_servers": max_servers,
+                "shortfall": 0, "retryable": False, "fatal_error": None}
 
     add_log(f"定时创建：当前 {existing_count} 台 / 上限 {max_servers} 台，需补充 {need} 台")
     add_log(f"  指定型号优先级：{' → '.join(server_types)}（仅创建这些型号）")
+    add_log(f"  使用镜像/快照 ID：{snapshot_id}（失效时会自动改用最新快照）")
 
     # ── 优先复用已保护的空闲 IP ──────────────────────────────────
     free_locked = _free_locked_primary_ips(hz, location) if use_locked else []
@@ -1271,6 +1400,7 @@ def do_scheduled_create(opts: Optional[Dict] = None):
 
     created_list = []
     failed = 0
+    fatal_error: Optional[Dict] = None
 
     for idx, name in enumerate(slots):
         reuse = free_locked.pop(0) if free_locked else None
@@ -1290,7 +1420,12 @@ def do_scheduled_create(opts: Optional[Dict] = None):
             add_log(f"  ✅ {name} → {result['ip']} [{result['server_type']}]")
         else:
             failed += 1
-            add_log(f"  ❌ {name} 创建失败", "error")
+            err = getattr(hz, "last_create_error", None) or {}
+            if err and not err.get("retryable", True):
+                fatal_error = err
+                add_log(f"  ❌ {name} 创建失败：{err.get('code')}: {err.get('message')}", "error")
+            else:
+                add_log(f"  ❌ {name} 创建失败（可能无货，稍后重试）", "error")
         time.sleep(2)
 
     # 刷新缓存
@@ -1301,22 +1436,32 @@ def do_scheduled_create(opts: Optional[Dict] = None):
 
     monitor_state["last_scheduled_create"] = datetime.now().isoformat()
     shortfall = max(0, need - len(created_list))
+    # 有不可重试的配置错误时，停止自动重试（例如快照 ID 不存在）
+    retryable = (fatal_error is None) and (shortfall > 0)
+    if fatal_error:
+        add_log(f"⛔ 检测到配置错误，已停止自动重试：{fatal_error.get('code')}: "
+                f"{fatal_error.get('message')}（请检查镜像/快照 ID、SSH 密钥等设置）", "error")
     add_log(f"定时创建完成：成功 {len(created_list)} / 失败 {failed} 台（上限 {max_servers}）"
-            + (f"，仍有 {shortfall} 台待重试" if shortfall else ""))
+            + (f"，仍有 {shortfall} 台待重试" if retryable else ("，已停止重试" if fatal_error else "")))
 
     # 同步 Vertex
     if created_list:
         sync_vertex_ips("定时创建后")
 
-    send_telegram(
+    tg_msg = (
         f"<b>🚀 定时创建完成</b>\n"
         f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"已有 {existing_count} 台 → 补充 {len(created_list)} 台 / 失败 {failed} 台（上限 {max_servers}）\n"
         + "\n".join([f"✅ <code>{s['ip']}</code> [{s['server_type']}] {s['name']}"
                      + ("（复用IP）" if s.get("reused_ip") else "") for s in created_list])
     )
+    if fatal_error:
+        tg_msg += (f"\n\n⛔ <b>已停止重试</b>：配置错误\n"
+                   f"<code>{fatal_error.get('code')}: {fatal_error.get('message')}</code>\n"
+                   f"请检查镜像/快照 ID、SSH 密钥等设置")
+    send_telegram(tg_msg)
     return {"created": created_list, "failed": failed, "max_servers": max_servers,
-            "shortfall": shortfall}
+            "shortfall": shortfall, "retryable": retryable, "fatal_error": fatal_error}
 
 
 def _get_tz_now(cfg: Dict) -> datetime:
@@ -1488,6 +1633,10 @@ def _process_retries(cfg: Dict):
         if result is not None and result.get("shortfall", 0) <= 0:
             _clear_retry(task_id)
             add_log(f"✅ 缺货重试成功，创建任务已完成（{task_id}）")
+        elif result is not None and result.get("retryable") is False:
+            _clear_retry(task_id)
+            err = result.get("fatal_error") or {}
+            add_log(f"⛔ 停止重试（{task_id}）：配置错误 {err.get('code')}: {err.get('message')}", "error")
         else:
             # 仍缺货或执行异常 → 继续排下一次重试
             with monitor_state["retry_lock"]:
@@ -1505,11 +1654,16 @@ def execute_task(task: Dict):
     if ttype == "create":
         result = do_scheduled_create(opts)
         task_id = task.get("id") or "create"
-        # 有缺口 → 排重试；已补齐 → 取消该任务的待重试
-        if result is not None and result.get("shortfall", 0) <= 0:
+        if result is None:
+            # 执行异常（如 API 报错）：保守排一次重试
+            _enqueue_retry(task, {}, load_config())
+        elif result.get("shortfall", 0) <= 0 or result.get("retryable") is False:
+            # 已补齐，或遇到不可重试的配置错误 → 取消该任务的待重试
             _clear_retry(task_id)
+            if result.get("fatal_error"):
+                add_log("⛔ 已停止该任务的重试（配置错误，需人工检查）", "error")
         else:
-            _enqueue_retry(task, result or {}, load_config())
+            _enqueue_retry(task, result, load_config())
         return result
     if ttype == "delete":
         _clear_retry(task.get("id") or "delete")
@@ -2020,7 +2174,14 @@ def create_server():
 
     image_id = data.get("image_id") or cfg.get("initial_snapshot_id")
     if not image_id:
-        return jsonify({"error": "未指定镜像 ID"}), 400
+        return jsonify({"error": "未指定镜像 ID，且系统设置中没有默认快照 ID"}), 400
+    # 镜像/快照 ID 失效时自动回退到账户内最新快照（与定时创建保持一致）
+    resolved_image = resolve_image_id(hz, image_id)
+    if not resolved_image:
+        return jsonify({"error": "账户内没有可用快照，请先在「快照镜像」中创建或选择一个镜像"}), 400
+    if str(resolved_image) != str(image_id):
+        _heal_image_config(resolved_image)
+    image_id = resolved_image
 
     try:
         count = max(1, min(int(data.get("count", 1) or 1), 20))
@@ -2166,8 +2327,10 @@ def rebuild_server(server_id):
     img_id = target["image"]["id"] if target["image"].get("type") == "snapshot" else None
     if not img_id and cfg.get("initial_snapshot_id"):
         img_id = int(cfg["initial_snapshot_id"])
+    img_id = resolve_image_id(hz, img_id)
     if not img_id:
         return jsonify({"error": "无可用快照"}), 400
+    _heal_image_config(img_id)
 
     old_name = target["name"]
     old_ip   = target["ipv4"]

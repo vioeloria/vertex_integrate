@@ -502,18 +502,29 @@ textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
   position:fixed; inset:0; z-index:200;
   background:rgba(26,32,64,.35); backdrop-filter:blur(6px);
   display:none; align-items:center; justify-content:center;
+  padding:16px;
 }
 .modal-bg.open { display:flex; }
 .modal-box {
   background:var(--white); border:1px solid var(--border-g2);
-  border-radius:24px; padding:30px 32px; width:500px;
-  max-width:92vw; max-height:84vh; overflow-y:auto;
+  border-radius:24px; padding:0; width:min(500px,100%);
+  max-height:86vh; display:flex; flex-direction:column; overflow:hidden;
   box-shadow:var(--shadow-float); animation:popIn .22s ease;
 }
-.modal-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
+.modal-hd {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:22px 26px 0; flex-shrink:0;
+}
 .modal-ttl { font-size:17px; font-weight:800; color:var(--ink); }
-.modal-x { background:rgba(67,97,238,.07); border:none; color:var(--ink2); font-size:19px; cursor:pointer; width:30px; height:30px; border-radius:8px; transition:all .15s; }
+.modal-x { background:rgba(67,97,238,.07); border:none; color:var(--ink2); font-size:19px; cursor:pointer; width:30px; height:30px; border-radius:8px; transition:all .15s; flex-shrink:0; }
 .modal-x:hover { background:rgba(244,63,94,.1); color:var(--rose); }
+/* 内容区可滚动，底部固定「关闭」按钮，避免移动端按钮被裁切 */
+#modal-body { padding:16px 26px 0; overflow-y:auto; flex:1 1 auto; -webkit-overflow-scrolling:touch; }
+.modal-ft {
+  display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;
+  padding:16px 26px 22px; flex-shrink:0;
+  border-top:1px solid var(--border-g); margin-top:16px;
+}
 
 /* ── TOAST ── */
 .toast-wrap { position:fixed; bottom:22px; right:22px; z-index:999; display:flex; flex-direction:column; gap:8px; }
@@ -731,8 +742,16 @@ textarea.inp { resize:vertical; min-height:80px; line-height:1.5; }
   /* 登录卡适配 */
   .login-card { width: 92vw; padding: 32px 24px; border-radius: 20px; }
 
-  /* Modal 适配 */
-  .modal-box { padding: 22px 18px; border-radius: 18px; }
+  /* Modal 适配：小屏尽量占满、内部滚动、操作按钮换行不裁切 */
+  .modal-bg { padding: 10px; }
+  .modal-box { width:100%; max-width:100%; max-height:92vh; border-radius:18px; }
+  .modal-hd { padding:18px 16px 0; }
+  #modal-body { padding:14px 16px 0; }
+  .modal-ft { padding:14px 16px 18px; }
+  .modal-ft .btn { flex:1 1 140px; }
+  #modal-body [style*="display:flex"] { flex-wrap:wrap; }
+  #modal-body [style*="display: flex"] { flex-wrap:wrap; }
+  #modal-body [style*="justify-content:flex-end"] > .btn { flex:1 1 100%; }
 }
 
 /* 超小屏（≤400px）*/
@@ -988,13 +1007,16 @@ body::before,body::after{display:none !important;}
 <div class="toast-wrap" id="toasts"></div>
 
 <!-- MODAL -->
-<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
-  <div class="modal-box">
+<div class="modal-bg" id="modal-bg">
+  <div class="modal-box" role="dialog" aria-modal="true">
     <div class="modal-hd">
       <div class="modal-ttl" id="modal-title"></div>
-      <button class="modal-x" onclick="closeModal()">×</button>
+      <button class="modal-x" onclick="closeModal()" aria-label="关闭">×</button>
     </div>
     <div id="modal-body"></div>
+    <div class="modal-ft">
+      <button class="btn btn-base" onclick="closeModal()">关闭</button>
+    </div>
   </div>
 </div>
 
@@ -1597,7 +1619,8 @@ function setToggle(id,val){const el=document.getElementById(id);if(el)el.classNa
 function toggleField(field,toggleId){S.config[field]=!S.config[field];setToggle(toggleId,S.config[field]);}
 function toggleSchedField(field,toggleId,callback){S.config[field]=!S.config[field];setToggle(toggleId,S.config[field]);if(callback)callback();}
 function openModal(title,body){document.getElementById('modal-title').textContent=title;document.getElementById('modal-body').innerHTML=body;document.getElementById('modal-bg').classList.add('open');}
-function closeModal(e){if(e&&e.target!==document.getElementById('modal-bg'))return;document.getElementById('modal-bg').classList.remove('open');}
+function closeModal(){document.getElementById('modal-bg').classList.remove('open');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
 function copy(text){navigator.clipboard?.writeText(text).then(()=>toast(`已复制: ${text}`)).catch(()=>toast('复制失败','err'));}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function emptyState(icon,title,sub=''){return `<div class="empty"><div class="empty-icon">${icon}</div><h3>${title}</h3>${sub?`<p>${sub}</p>`:''}</div>`;}
