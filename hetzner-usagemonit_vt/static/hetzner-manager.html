@@ -962,7 +962,7 @@ body::before,body::after{display:none !important;}
 
 @media(max-width:860px){
   /* 移动端改为「汉堡按钮 + 左侧抽屉」，避免顶部导航被挤压/遮挡 */
-  .hamburger{ display:flex !important; z-index:65; }
+  .hamburger{ display:flex !important; z-index:50; }
   .sb-overlay{ display:block !important; opacity:0; pointer-events:none; z-index:55; }
   .sb-overlay.open{ opacity:1 !important; pointer-events:auto !important; }
 
@@ -1013,12 +1013,6 @@ body::before,body::after{display:none !important;}
 </head>
 <body>
 
-<!-- 汉堡菜单按钮（仅移动端显示） -->
-<button class="hamburger" id="ham-btn" onclick="toggleSidebar()" aria-label="打开菜单">☰</button>
-
-<!-- 侧边栏遮罩 -->
-<div class="sb-overlay" id="sb-overlay" onclick="toggleSidebar()"></div>
-
 <!-- 侧边栏宽度调节手柄 -->
 <div class="sb-resize-handle" id="sb-resize-handle" title="拖动调整侧边栏宽度"></div>
 
@@ -1065,6 +1059,12 @@ body::before,body::after{display:none !important;}
 
 <!-- APP -->
 <div id="app">
+  <!-- 汉堡菜单按钮（仅移动端显示，放在 #app 内以处于同一堆叠上下文） -->
+  <button class="hamburger" id="ham-btn" onclick="toggleSidebar()" aria-label="打开菜单">☰</button>
+
+  <!-- 侧边栏遮罩 -->
+  <div class="sb-overlay" id="sb-overlay" onclick="toggleSidebar()"></div>
+
   <nav class="sidebar" id="sidebar">
     <div class="sb-head">
       <div class="sb-brand">
